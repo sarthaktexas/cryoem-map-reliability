@@ -4,7 +4,7 @@ Python tools for **local map reliability** in cryo-EM reconstructions: density s
 
 The goal is to test whether inexpensive map features track **half-map cross-correlation** and **local FSC** well enough to guide modeling. This is **not** a claim that density alone defines molecular flexibility.
 
-All volumes use NumPy 3D arrays in **`(Z, Y, X)`** order (section, row, column), consistent with typical `mrcfile` layouts.
+All volumes use NumPy 3D arrays in `(Z, Y, X)` order (section, row, column), consistent with typical `mrcfile` layouts.
 
 ---
 
@@ -79,18 +79,20 @@ python scripts/run_cohort_pipeline.py
 
 ## Scripts
 
-| Script | Purpose |
-|--------|---------|
-| `scripts/run_analysis.py` | Feature vs half-map CC (+ optional local FSC map) |
-| `scripts/run_local_fsc.py` | Windowed local FSC → Å MRC |
-| `scripts/run_lh_map_reliability_export.py` | H_repro, reliability score, build zones, summary figures |
-| `scripts/run_extended_feature_validation.py` | Extended stats, Hessian, ridge CV vs CC |
-| `scripts/run_lh_vs_b_and_fsc.py` | Reliability metrics vs B-factors, CC, local FSC |
-| `scripts/run_residue_bfactor_validation.py` | Cα B_iso vs reliability / build zones |
-| `scripts/run_residue_bfactor_score_correlation.py` | B vs multiple map scores (sphere sampling) |
-| `scripts/run_residue_bfactor_conformation_pair.py` | ΔB vs Δreliability across two EMDB states |
-| `scripts/run_cohort_pipeline.py` | Batch processing from `cohort/manifest.csv` |
-| `scripts/run_cohort_summary_figures.py` | Cohort-level summary tables and figures |
+
+| Script                                             | Purpose                                                  |
+| -------------------------------------------------- | -------------------------------------------------------- |
+| `scripts/run_analysis.py`                          | Feature vs half-map CC (+ optional local FSC map)        |
+| `scripts/run_local_fsc.py`                         | Windowed local FSC → Å MRC                               |
+| `scripts/run_lh_map_reliability_export.py`         | H_repro, reliability score, build zones, summary figures |
+| `scripts/run_extended_feature_validation.py`       | Extended stats, Hessian, ridge CV vs CC                  |
+| `scripts/run_lh_vs_b_and_fsc.py`                   | Reliability metrics vs B-factors, CC, local FSC          |
+| `scripts/run_residue_bfactor_validation.py`        | Cα B_iso vs reliability / build zones                    |
+| `scripts/run_residue_bfactor_score_correlation.py` | B vs multiple map scores (sphere sampling)               |
+| `scripts/run_residue_bfactor_conformation_pair.py` | ΔB vs Δreliability across two EMDB states                |
+| `scripts/run_cohort_pipeline.py`                   | Batch processing from `cohort/manifest.csv`              |
+| `scripts/run_cohort_summary_figures.py`            | Cohort-level summary tables and figures                  |
+
 
 Archive / sensitivity scripts live under `scripts/archive/`.
 
@@ -143,8 +145,24 @@ python -m unittest discover -s tests -v
 
 ## Citation
 
-If you use this software, please cite the associated publication (forthcoming) and link to this repository.
+**Before the manuscript is published**, cite the software (and pin a commit hash or release tag if reproducibility matters):
+
+```bibtex
+@software{mohanty2026cryoem_map_reliability,
+  author = {Mohanty, Sarthak},
+  title = {cryoem-map-reliability: local map reliability from cryo-EM density and half-maps},
+  year = {2026},
+  url = {https://github.com/sarthaktexas/cryoem-map-reliability},
+  version = {0.1.0}
+}
+```
+
+GitHub also reads [CITATION.cff](CITATION.cff) for the **Cite this repository** button.
+
+**After publication**, cite the paper as the primary reference. Also cite this repo (or a Zenodo archive) when you need the exact pipeline version used in the work—for example after tagging a release or minting a DOI at acceptance.
+
+When the manuscript exists, add a `preferred-citation` block to `CITATION.cff` (template included there) and drop the BibTeX for the article into this section.
 
 ## License
 
-License TBD. Adjust for your institution before public release.
+MIT License. See [LICENSE](LICENSE).

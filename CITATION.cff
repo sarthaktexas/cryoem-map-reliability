@@ -1,0 +1,35 @@
+cff-version: 1.2.0
+title: "cryoem-map-reliability: local map reliability from cryo-EM density and half-maps"
+message: >-
+  If you use this software, please cite it using the metadata in this file.
+  When the associated manuscript is published, cite that article as the primary
+  reference and this repository (or its Zenodo archive) for the exact code version.
+type: software
+authors:
+  - family-names: Mohanty
+    given-names: Sarthak
+repository-code: "https://github.com/sarthaktexas/cryoem-map-reliability"
+url: "https://github.com/sarthaktexas/cryoem-map-reliability"
+license: MIT
+version: 0.1.0
+date-released: "2026-06-07"
+keywords:
+  - cryo-electron-microscopy
+  - map quality
+  - half-map correlation
+  - local resolution
+  - density statistics
+
+# Uncomment and fill in when the manuscript is accepted:
+#
+# preferred-citation:
+#   type: article
+#   title: "TITLE"
+#   authors:
+#     - family-names: Mohanty
+#       given-names: Sarthak
+#     # - family-names: PI
+#     #   given-names: Name
+#   journal: ""
+#   year: 202x
+#   doi: "10.1038/x"
