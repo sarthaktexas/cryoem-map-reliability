@@ -1,0 +1,5 @@
+numpy>=1.24
+scipy>=1.10
+mrcfile>=1.4
+matplotlib>=3.7
+gemmi>=0.6
