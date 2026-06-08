@@ -917,6 +917,7 @@ def write_bfactor_validation_md(
         for z in (0, 1, 2)
         if z in stats.median_b_by_zone
     )
+    caveat_line = f"\n\n**Caveat:** {stats.notes}" if stats.notes else ""
     text = f"""# B-factor external validation — EMD-{stats.emdb_id}
 
 Exploratory comparison of **deposited model B-factors** vs **map reliability** (H_repro / build zones).
@@ -939,8 +940,7 @@ and local order, while reliability_score reflects half-map agreement inside the 
 | Partial: B vs reliability \\| local_variance | {stats.partial_b_vs_reliability_given_variance:+.3f} |
 
 **Sign note:** Higher B_iso ↔ more displacement; higher reliability_score ↔ more reliable map.
-A **negative** ρ(B, reliability) is the naive expectation if both proxy local order.
-{f"\\n\\n**Caveat:** {stats.notes}" if stats.notes else ""}
+A **negative** ρ(B, reliability) is the naive expectation if both proxy local order.{caveat_line}
 
 ---
 
