@@ -95,7 +95,7 @@ def save_volume_like_reference(
     Write a 3D array as MRC using the reference file's header (cell, origin, sym, …).
 
     Reads only the reference header (not the full map), then writes ``out_path``
-    with the same grid as ``reference_path`` so viewers like ChimeraX superpose
+    with the same grid as ``reference_path`` so volume overlays superpose
     the volume on the original map. ``volume`` must be shaped ``(Z, Y, X)`` like
     :func:`load_mrc`.
 
@@ -149,7 +149,7 @@ def save_rigidity_mrc(
     """
     Write the rigidity map to ``<reference_stem>_rigidity.mrc`` (or ``out_path``).
 
-    Same grid and header geometry as ``reference_path`` for Chimera / ChimeraX.
+    Same grid and header geometry as ``reference_path``.
     """
     reference_path = Path(reference_path)
     if out_path is None:

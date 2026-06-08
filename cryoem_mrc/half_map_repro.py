@@ -6,6 +6,8 @@ from pathlib import Path
 
 import matplotlib.pyplot as plt
 import numpy as np
+
+from style.nature import apply, label_panel, savefig as save_nature
 from scipy import ndimage
 
 from .io import save_volume_like_reference
@@ -114,6 +116,7 @@ def plot_half_map_metric_distributions(
     flat_ax = axes.ravel()
     for i, name in enumerate(names):
         ax = flat_ax[i]
+        apply(ax)
         v = np.asarray(metrics[name]).ravel()
         if v.size > max_samples:
             idx = rng.choice(v.size, size=max_samples, replace=False)
@@ -122,11 +125,12 @@ def plot_half_map_metric_distributions(
         ax.hist(v, bins=bins, density=True, color="steelblue", alpha=0.85)
         ax.set_title(name)
         ax.set_ylabel("density")
+        label_panel(ax, chr(ord("a") + i))
     for j in range(len(names), len(flat_ax)):
         flat_ax[j].set_visible(False)
     fig.tight_layout()
     if save_path is not None:
-        fig.savefig(save_path, dpi=150, bbox_inches="tight")
+        save_nature(fig, save_path)
     if show:
         plt.show()
     return fig

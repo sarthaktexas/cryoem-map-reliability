@@ -953,6 +953,6 @@ Matched Cα by (chain, seq_num, seq_icode). Δ = state B − state A.
 {cov_block}
 Large |ΔB| often reflects **biochemical conformational change**, not map-quality change alone.
 
-See `docs/CONFORMATION_PAIR_ANALYSIS.md` for clustering, coupling maps, and ChimeraX export.
+See `docs/CONFORMATION_PAIR_ANALYSIS.md` for clustering, coupling maps, and figure outputs.
 """
     path.write_text(text)

@@ -12,8 +12,19 @@ import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib.patches import Rectangle
 
-from .conformation_pair import interior_residue_indices
-from .repo_paths import OUTPUTS_ROOT
+from style.nature import PALETTES, apply, label_panel, savefig as save_nature
+
+from .conformation_pair import (
+    DOMAIN_COLORS,
+    UNASSIGNED_DOMAIN_COLOR,
+    compute_domain_mean_coupling,
+    get_domain_assignments,
+    get_domain_regions_for_pair,
+    interior_residue_indices,
+    reload_domain_colors,
+)
+from .repo_paths import COHORT_MANIFEST, OUTPUTS_ROOT
+from .structure_validation import load_cohort_manifest_row
 
 
 def pick_slice_index(
@@ -202,6 +213,7 @@ def plot_masked_slice(
     ``crop_bbox`` zooms to ``(y0, y1, x0, x1)`` on the slice (see
     :func:`slice_crop_from_mask`).
     """
+    apply(ax)
     if crop_bbox is not None:
         sl = crop_slice_2d(sl, crop_bbox)
         mask_sl = crop_slice_2d(mask_sl, crop_bbox)
@@ -272,7 +284,7 @@ def plot_local_resolution_slice(
         _add_scale_bar(ax, voxel_size_a=voxel_size_a, length_a=scale_bar_a)
     fig.tight_layout()
     if save_path:
-        fig.savefig(save_path, dpi=dpi, bbox_inches="tight", facecolor="white")
+        save_nature(fig, save_path, dpi=dpi)
     return fig
 
 
@@ -352,6 +364,8 @@ def plot_parallel_reliability_readouts(
         already_contoured=True,
         **kw,
     )
+    for letter, ax in zip("abc", axes):
+        label_panel(ax, letter)
     if contour is not None:
         fig.suptitle(
             f"Parallel reliability readouts (mask ρ ≥ {contour:g}, windowed metrics)",
@@ -361,7 +375,7 @@ def plot_parallel_reliability_readouts(
     _add_scale_bar(axes[0], voxel_size_a=voxel_size_a, length_a=scale_bar_a)
     fig.tight_layout()
     if save_path:
-        fig.savefig(save_path, dpi=dpi, bbox_inches="tight", facecolor="white")
+        save_nature(fig, save_path, dpi=dpi)
     return fig
 
 
@@ -408,12 +422,14 @@ def plot_feature_family_panel(
             already_contoured=True,
             crop_bbox=crop_bbox,
         )
+    for i, ax in enumerate(axes_flat[:n]):
+        label_panel(ax, chr(ord("a") + i))
     for ax in axes_flat[n:]:
         ax.axis("off")
     fig.suptitle(family_title, fontsize=13, y=1.02)
     fig.tight_layout()
     if save_path:
-        fig.savefig(save_path, dpi=dpi, bbox_inches="tight", facecolor="white")
+        save_nature(fig, save_path, dpi=dpi)
     return fig
 
 
@@ -469,10 +485,12 @@ def plot_reliability_pair_only(
         title="Local FSC resolution",
         **kw,
     )
+    label_panel(axes[0], "a")
+    label_panel(axes[1], "b")
     fig.suptitle(f"Same slice Z = {slice_index}", fontsize=11)
     fig.tight_layout()
     if save_path:
-        fig.savefig(save_path, dpi=dpi, bbox_inches="tight", facecolor="white")
+        save_nature(fig, save_path, dpi=dpi)
     return fig
 
 
@@ -506,6 +524,7 @@ def plot_spearman_top_bar(
     vals = [float(r[rho_key]) for r in ranked]
 
     fig, ax = plt.subplots(figsize=(7.5, 0.45 * top_n + 1.5))
+    apply(ax)
     colors = ["#2c7bb6" if v >= 0 else "#d7191c" for v in vals]
     y = np.arange(len(labels))
     ax.barh(y, vals, color=colors)
@@ -517,7 +536,7 @@ def plot_spearman_top_bar(
     ax.invert_yaxis()
     fig.tight_layout()
     if save_path:
-        fig.savefig(save_path, dpi=dpi, bbox_inches="tight", facecolor="white")
+        save_nature(fig, save_path, dpi=dpi)
     return fig
 
 
@@ -624,7 +643,8 @@ def plot_cohort_metrics_heatmap(
     fig_h = max(3.0, 0.45 * len(rows) + 1.5)
     fig_w = max(6.0, 1.4 * len(col_titles) + 2.0)
     fig, ax = plt.subplots(figsize=(fig_w, fig_h))
-    cmap = plt.get_cmap("RdBu_r").copy()
+    apply(ax)
+    cmap = PALETTES["diverging"].copy()
     cmap.set_bad(color="#e0e0e0")
     masked = np.ma.masked_invalid(data)
     im = ax.imshow(masked, aspect="auto", cmap=cmap, vmin=-1.0, vmax=1.0)
@@ -644,7 +664,7 @@ def plot_cohort_metrics_heatmap(
     cbar.set_label("Spearman ρ", fontsize=9)
     fig.tight_layout()
     if save_path:
-        fig.savefig(save_path, dpi=dpi, bbox_inches="tight", facecolor="white")
+        save_nature(fig, save_path, dpi=dpi)
     return fig
 
 
@@ -714,340 +734,6 @@ def _local_profile_cross_corr_matrix(
     return corr
 
 
-def _chain_break_positions(chains: Sequence[str]) -> list[int]:
-    return [i for i in range(1, len(chains)) if chains[i] != chains[i - 1]]
-
-
-def _normalize_strip(values: np.ndarray, *, percentile: float = 98) -> np.ndarray:
-    """Scale to ±1 by in-metric magnitude so strips share one colorbar across units."""
-    values = np.asarray(values, dtype=np.float64)
-    lim = float(np.nanpercentile(np.abs(values), percentile)) if values.size else 1.0
-    if not np.isfinite(lim) or lim <= 0:
-        return np.zeros_like(values)
-    return values / lim
-
-
-def plot_conformation_sequence_strip(
-    pairs: Sequence[tuple[object, object]],
-    *,
-    emdb_a: str,
-    emdb_b: str,
-    in_mask_both: bool = True,
-    save_path: str | Path | None = None,
-    dpi: int = 150,
-) -> plt.Figure | None:
-    """
-    Two-row sequence strip: ΔB_iso and Δreliability along matched Cα (state B − A).
-
-    Residues are ordered by (chain, seq_num, seq_icode). Vertical lines mark chain breaks.
-    Returns ``None`` when fewer than 10 in-mask matched residues.
-    """
-    packed = _sorted_conformation_deltas(pairs, in_mask_both=in_mask_both)
-    if packed is None:
-        return None
-    use, db, drel, chains = packed
-    strip_rows: list[tuple[str, np.ndarray]] = [
-        (f"ΔB_iso ({emdb_b} − {emdb_a})", _normalize_strip(db)),
-        (f"Δreliability ({emdb_b} − {emdb_a})", _normalize_strip(drel)),
-    ]
-
-    n = len(use)
-    fig_w = min(16.0, max(7.0, n * 0.006))
-    fig, axes = plt.subplots(
-        len(strip_rows),
-        1,
-        figsize=(fig_w, 1.35 * len(strip_rows) + 1.2),
-        sharex=True,
-        squeeze=False,
-        layout="constrained",
-    )
-    cmap = plt.get_cmap("RdBu_r")
-    tick_idx = np.linspace(0, n - 1, num=min(12, n), dtype=int)
-    tick_labels = [
-        f"{use[i][0].chain}:{use[i][0].seq_num}{use[i][0].seq_icode.strip() or ''}"
-        for i in tick_idx
-    ]
-
-    im = None
-    for ax, (ylabel, values) in zip(axes[:, 0], strip_rows):
-        row = values.reshape(1, -1)
-        im = ax.imshow(
-            row,
-            aspect="auto",
-            cmap=cmap,
-            vmin=-1.0,
-            vmax=1.0,
-            interpolation="nearest",
-        )
-        ax.set_yticks([0], [ylabel], fontsize=9)
-        ax.set_xticks([])
-        for i in range(1, n):
-            if chains[i] != chains[i - 1]:
-                ax.axvline(i - 0.5, color="0.2", lw=0.6, alpha=0.7)
-
-    if im is not None:
-        cbar = fig.colorbar(im, ax=axes[:, 0], fraction=0.02, pad=0.02)
-        cbar.set_label("normalized Δ (98th pct → ±1)", fontsize=8)
-        cbar.ax.tick_params(labelsize=8)
-
-    axes[-1, 0].set_xticks(tick_idx, tick_labels, rotation=45, ha="right", fontsize=7)
-    axes[-1, 0].set_xlabel("Residue index (chain order)", fontsize=9)
-    fig.suptitle(
-        f"Conformation pair EMD-{emdb_a} vs EMD-{emdb_b} (n={n} in-mask Cα)",
-        fontsize=10,
-    )
-    if save_path:
-        fig.savefig(save_path, dpi=dpi, bbox_inches="tight", facecolor="white")
-    return fig
-
-
-def plot_conformation_pair_coupling_heatmap(
-    pairs: Sequence[tuple[object, object]],
-    *,
-    emdb_a: str,
-    emdb_b: str,
-    in_mask_both: bool = True,
-    half_window: int | None = None,
-    spearman_rho: float | None = None,
-    save_path: str | Path | None = None,
-    dpi: int = 150,
-) -> plt.Figure | None:
-    """
-    AF3-style coupling figure: ΔB strip (top), Δreliability strip (left), local cross-correlation
-    heatmap (center) on matched Cα sequence indices.
-
-    Center panel entry (i, j) is Pearson r between a sequence window around residue i in
-    ΔB_iso and a window around j in Δreliability. Strong diagonal band → local co-variation
-    of deposited B-factor change with map-reliability change between conformations.
-    """
-    packed = _sorted_conformation_deltas(pairs, in_mask_both=in_mask_both)
-    if packed is None:
-        return None
-    use, db, drel, chains = packed
-    n = len(use)
-    hw = half_window if half_window is not None else max(5, min(21, n // 25))
-    corr_full = _local_profile_cross_corr_matrix(db, drel, half_window=hw)
-    corr, db_i, drel_i, use_i, _idx = _coupling_interior_slice(
-        corr_full, db, drel, use, half_window=hw
-    )
-    n_i = len(use_i)
-
-    strip_cmap = plt.get_cmap("RdBu_r")
-    db_strip = _normalize_strip(db_i)
-    drel_strip = _normalize_strip(drel_i)
-    chains_i = [a.chain for a, _ in use_i]
-
-    size = min(11.0, max(7.0, n_i * 0.007))
-    fig = plt.figure(figsize=(size, size), facecolor="white", layout="constrained")
-    gs = fig.add_gridspec(
-        2,
-        3,
-        width_ratios=[0.06, 1.0, 0.05],
-        height_ratios=[0.06, 1.0],
-        wspace=0.03,
-        hspace=0.03,
-    )
-    ax_corner = fig.add_subplot(gs[0, 0])
-    ax_top = fig.add_subplot(gs[0, 1])
-    ax_left = fig.add_subplot(gs[1, 0])
-    ax_main = fig.add_subplot(gs[1, 1])
-    ax_cbar = fig.add_subplot(gs[1, 2])
-
-    ax_corner.axis("off")
-
-    x0, x1 = -0.5, n_i - 0.5
-    y0, y1 = -0.5, n_i - 0.5
-
-    breaks = _chain_break_positions(chains_i)
-
-    im_top = ax_top.imshow(
-        db_strip.reshape(1, -1),
-        extent=(x0, x1, -0.5, 0.5),
-        aspect="auto",
-        cmap=strip_cmap,
-        vmin=-1.0,
-        vmax=1.0,
-        interpolation="nearest",
-        origin="lower",
-    )
-    ax_top.set_xlim(x0, x1)
-    ax_top.set_ylim(-0.5, 0.5)
-    ax_top.set_xticks([])
-    ax_top.set_yticks([])
-    ax_top.set_frame_on(False)
-    ax_top.set_title(f"ΔB_iso ({emdb_b} − {emdb_a})", fontsize=8, pad=2)
-    for i in breaks:
-        ax_top.axvline(i - 0.5, color="0.15", lw=0.5, alpha=0.8)
-
-    im_left = ax_left.imshow(
-        drel_strip.reshape(-1, 1),
-        extent=(-0.5, 0.5, y0, y1),
-        aspect="auto",
-        cmap=strip_cmap,
-        vmin=-1.0,
-        vmax=1.0,
-        interpolation="nearest",
-        origin="lower",
-    )
-    ax_left.set_xlim(-0.5, 0.5)
-    ax_left.set_ylim(y0, y1)
-    ax_left.set_xticks([])
-    ax_left.set_yticks([])
-    ax_left.set_frame_on(False)
-    ax_left.set_ylabel(
-        f"Δreliability ({emdb_b} − {emdb_a})",
-        fontsize=8,
-        labelpad=2,
-    )
-    for i in breaks:
-        ax_left.axhline(i - 0.5, color="0.15", lw=0.5, alpha=0.8)
-
-    corr_cmap = plt.get_cmap("RdBu_r")
-    im_main = ax_main.imshow(
-        corr,
-        extent=(x0, x1, y0, y1),
-        aspect="equal",
-        origin="lower",
-        cmap=corr_cmap,
-        vmin=-1.0,
-        vmax=1.0,
-        interpolation="nearest",
-    )
-    ax_main.set_xlim(x0, x1)
-    ax_main.set_ylim(y0, y1)
-    for i in breaks:
-        ax_main.axvline(i - 0.5, color="0.2", lw=0.4, alpha=0.55)
-        ax_main.axhline(i - 0.5, color="0.2", lw=0.4, alpha=0.55)
-
-    tick_idx = np.linspace(0, n_i - 1, num=min(10, n_i), dtype=int)
-    tick_labels = [
-        f"{use_i[i][0].chain}:{use_i[i][0].seq_num}{use_i[i][0].seq_icode.strip() or ''}"
-        for i in tick_idx
-    ]
-    ax_main.set_xticks(tick_idx, tick_labels, rotation=45, ha="right", fontsize=7)
-    ax_main.set_yticks(tick_idx, tick_labels, fontsize=7)
-    ax_main.set_xlabel("Residue index (chain order)", fontsize=9)
-    ax_main.set_ylabel("Residue index (chain order)", fontsize=9)
-
-    rho_txt = ""
-    if spearman_rho is not None and np.isfinite(spearman_rho):
-        rho_txt = f" · Spearman ρ(ΔB, Δrel) = {spearman_rho:+.2f}"
-    ax_main.set_title(
-        f"Local ΔB vs Δreliability coupling (window ±{hw} res.){rho_txt}",
-        fontsize=9,
-    )
-
-    strip_cbar = fig.colorbar(im_top, ax=ax_top, location="top", fraction=0.85, pad=0.08)
-    strip_cbar.set_label("normalized Δ (98th pct → ±1)", fontsize=8)
-    strip_cbar.ax.tick_params(labelsize=7)
-
-    cbar = fig.colorbar(im_main, cax=ax_cbar)
-    cbar.set_label("Pearson r (local windows)", fontsize=8)
-    cbar.ax.tick_params(labelsize=7)
-
-    fig.suptitle(
-        f"Conformation pair EMD-{emdb_a} vs EMD-{emdb_b} (n={n_i} interior / {n} in-mask Cα)",
-        fontsize=10,
-    )
-    if save_path:
-        fig.savefig(save_path, dpi=dpi, bbox_inches="tight", facecolor="white")
-    return fig
-
-
-def plot_conformation_delta_joint_heatmap(
-    pairs: Sequence[tuple[object, object]],
-    *,
-    emdb_a: str,
-    emdb_b: str,
-    in_mask_both: bool = True,
-    spearman_rho: float | None = None,
-    bins: int = 40,
-    save_path: str | Path | None = None,
-    dpi: int = 150,
-) -> plt.Figure | None:
-    """
-    Joint density of per-residue (ΔB_iso, Δreliability) with 1D marginal histograms.
-
-    Complements :func:`plot_conformation_pair_coupling_heatmap`: shows global co-variation
-    of the two delta tracks (2D histogram + scatter overlay).
-    """
-    packed = _sorted_conformation_deltas(pairs, in_mask_both=in_mask_both)
-    if packed is None:
-        return None
-    use, db, drel, _chains = packed
-    n = len(use)
-
-    db_lim = float(np.nanpercentile(np.abs(db), 98)) if db.size else 1.0
-    drel_lim = float(np.nanpercentile(np.abs(drel), 98)) if drel.size else 1.0
-    if not np.isfinite(db_lim) or db_lim <= 0:
-        db_lim = 1.0
-    if not np.isfinite(drel_lim) or drel_lim <= 0:
-        drel_lim = 1.0
-
-    fig = plt.figure(figsize=(6.5, 6.0), facecolor="white")
-    gs = fig.add_gridspec(
-        2,
-        2,
-        width_ratios=[1.0, 0.2],
-        height_ratios=[0.2, 1.0],
-        wspace=0.04,
-        hspace=0.04,
-    )
-    ax_main = fig.add_subplot(gs[1, 0])
-    ax_top = fig.add_subplot(gs[0, 0], sharex=ax_main)
-    ax_right = fig.add_subplot(gs[1, 1], sharey=ax_main)
-
-    ax_top.hist(db, bins=bins, range=(-db_lim, db_lim), color="#9467bd", alpha=0.85, edgecolor="none")
-    ax_top.set_ylabel("count", fontsize=8)
-    ax_top.tick_params(labelbottom=False, labelsize=8)
-
-    hist, xedges, yedges = np.histogram2d(
-        db,
-        drel,
-        bins=bins,
-        range=[[-db_lim, db_lim], [-drel_lim, drel_lim]],
-    )
-    hist = hist.T
-    ax_main.imshow(
-        hist,
-        origin="lower",
-        aspect="auto",
-        extent=[xedges[0], xedges[-1], yedges[0], yedges[-1]],
-        cmap="magma",
-        interpolation="nearest",
-    )
-    ax_main.scatter(db, drel, s=8, alpha=0.3, c="white", edgecolors="none", linewidths=0)
-    ax_main.axhline(0, color="0.75", lw=0.7)
-    ax_main.axvline(0, color="0.75", lw=0.7)
-    ax_main.set_xlabel(f"ΔB_iso ({emdb_b} − {emdb_a})")
-    ax_main.set_ylabel(f"Δreliability ({emdb_b} − {emdb_a})")
-    rho_txt = ""
-    if spearman_rho is not None and np.isfinite(spearman_rho):
-        rho_txt = f" (Spearman ρ = {spearman_rho:+.2f})"
-    ax_main.set_title(f"Per-residue joint density{rho_txt}", fontsize=9)
-
-    ax_right.hist(
-        drel,
-        bins=bins,
-        range=(-drel_lim, drel_lim),
-        color="#1f77b4",
-        alpha=0.85,
-        edgecolor="none",
-        orientation="horizontal",
-    )
-    ax_right.tick_params(labelleft=False, labelsize=8)
-
-    fig.suptitle(
-        f"Conformation pair EMD-{emdb_a} vs EMD-{emdb_b} (n={n} in-mask Cα)",
-        fontsize=10,
-        y=0.98,
-    )
-    fig.subplots_adjust(top=0.93)
-    if save_path:
-        fig.savefig(save_path, dpi=dpi, bbox_inches="tight", facecolor="white")
-    return fig
-
-
 def compute_conformation_coupling(
     pairs: Sequence[tuple[object, object]],
     *,
@@ -1055,7 +741,7 @@ def compute_conformation_coupling(
     half_window: int | None = None,
 ) -> dict[str, object] | None:
     """
-    Coupling matrices and per-residue Δ tracks for export / ChimeraX / triptych.
+    Coupling matrices and per-residue Δ tracks for conformation-pair summary figures.
 
     Returns full in-mask arrays plus an interior crop with complete local windows.
     """
@@ -1102,6 +788,55 @@ def _hierarchical_cluster(corr: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
     return np.asarray(leaves_list(z), dtype=int), z
 
 
+def compute_coupling_cluster_separation_score(
+    corr: np.ndarray,
+    *,
+    k_max: int = 6,
+) -> tuple[float, np.ndarray, np.ndarray]:
+    """
+    Block-structure diagnostic for adaptive conformation-pair figures.
+
+    Average-linkage clustering is cut at k = 2 … k_max; the score is the
+    maximum normalized within-minus-across |r| contrast over those cuts.
+    Higher → clearer block structure in the cluster-reordered matrix.
+
+    Typical interior-matrix values:
+        TRPV1 23129/23130 ≈ 0.05 (domain layout)
+        MgtA 49450/48534 ≈ 0.15 (block layout)
+
+    Returns (score, leaf_order, linkage_matrix).
+    """
+    from scipy.cluster.hierarchy import fcluster
+
+    order, z = _hierarchical_cluster(corr)
+    n = int(corr.shape[0])
+    if n < 10 or z.shape[0] < 2:
+        return 0.0, order, z
+
+    best = 0.0
+    for k in range(2, min(k_max + 1, max(3, n // 50 + 2))):
+        labels = fcluster(z, t=k, criterion="maxclust")
+        same_abs: list[float] = []
+        diff_abs: list[float] = []
+        for i in range(n):
+            for j in range(n):
+                val = float(corr[i, j])
+                if not np.isfinite(val):
+                    continue
+                mag = abs(val)
+                if int(labels[i]) == int(labels[j]):
+                    same_abs.append(mag)
+                else:
+                    diff_abs.append(mag)
+        if not same_abs or not diff_abs:
+            continue
+        ms = float(np.mean(same_abs))
+        md = float(np.mean(diff_abs))
+        best = max(best, float((ms - md) / (ms + md + 1e-9)))
+
+    return best, order, z
+
+
 def _hierarchical_residue_order(corr: np.ndarray) -> np.ndarray:
     order, _ = _hierarchical_cluster(corr)
     return order
@@ -1129,15 +864,541 @@ def _coupling_interior_slice(
     )
 
 
-def _set_equal_3d_limits(ax, coords: np.ndarray) -> None:
-    """Cube bounding box so the structure is not sheared."""
-    ctr = coords.mean(axis=0)
-    span = float(np.max(np.linalg.norm(coords - ctr, axis=1)))
-    if not np.isfinite(span) or span <= 0:
-        span = 1.0
-    ax.set_xlim(ctr[0] - span, ctr[0] + span)
-    ax.set_ylim(ctr[1] - span, ctr[1] + span)
-    ax.set_zlim(ctr[2] - span, ctr[2] + span)
+def _apply_panel_style(ax) -> None:
+    """Nature styling for 2D axes."""
+    apply(ax)
+
+
+def _add_anchor_colorbar(
+    fig,
+    mappable,
+    anchor_ax,
+    *,
+    label: str,
+    pad: float = 0.012,
+    width: float = 0.007,
+):
+    """Place a thin colorbar just right of ``anchor_ax`` (after layout is finalized)."""
+    pos = anchor_ax.get_position()
+    cax = fig.add_axes([pos.x1 + pad, pos.y0, width, pos.height])
+    cbar = fig.colorbar(mappable, cax=cax)
+    cbar.set_label(label, fontsize=7)
+    cbar.ax.tick_params(labelsize=6, length=2)
+    return cbar
+
+
+def _conformation_pair_summary_data(
+    pairs: Sequence[tuple[object, object]],
+    *,
+    in_mask_both: bool,
+    half_window: int | None,
+) -> dict[str, object] | None:
+    """Shared arrays for conformation-pair summary figures."""
+    coupling = compute_conformation_coupling(
+        pairs, in_mask_both=in_mask_both, half_window=half_window
+    )
+    if coupling is None:
+        return None
+    packed = _sorted_conformation_deltas(pairs, in_mask_both=in_mask_both)
+    if packed is None:
+        return None
+    use_full_list, db_full, drel_full, _chains = packed
+    corr_i = coupling["interior_corr"]
+    use_int = coupling["interior_use"]
+    n_int = len(use_int)
+    hw = int(coupling["half_window"])
+    sep_score, cluster_order, _z_link = compute_coupling_cluster_separation_score(corr_i)
+    corr_ord = corr_i[np.ix_(cluster_order, cluster_order)]
+    use_all = coupling["use"]
+    row_mean = np.asarray(coupling["row_mean_abs"], dtype=np.float64)
+    coords_all = np.array([[a.x, a.y, a.z] for a, _ in use_all], dtype=np.float64)
+    return {
+        "coupling": coupling,
+        "db_full": db_full,
+        "drel_full": drel_full,
+        "use_full": use_full_list,
+        "n_full": len(use_full_list),
+        "n_int": n_int,
+        "hw": hw,
+        "corr_ord": corr_ord,
+        "corr_int": corr_i,
+        "cluster_order": cluster_order,
+        "cluster_separation_score": sep_score,
+        "interior_use": use_int,
+        "coords_all": coords_all,
+        "row_mean": row_mean,
+        "c_lo": float(np.nanmin(row_mean)),
+        "c_hi": float(np.nanmax(row_mean)),
+    }
+
+
+DEFAULT_CLUSTER_SEPARATION_THRESHOLD = 0.10
+
+
+def _cohort_display_name(emdb_id: str, manifest: Path | None = None) -> str:
+    """Human-readable structure name from ``cohort/manifest.csv`` (``display_name`` column)."""
+    eid = str(emdb_id).strip()
+    path = manifest if manifest is not None else COHORT_MANIFEST
+    try:
+        row = load_cohort_manifest_row(path, eid)
+        name = str(row.get("display_name", "")).strip()
+        if name:
+            return name
+    except (KeyError, OSError, csv.Error):
+        pass
+    return f"EMD-{eid}"
+
+
+def select_conformation_pair_figure_layout(
+    separation_score: float,
+    *,
+    threshold: float = DEFAULT_CLUSTER_SEPARATION_THRESHOLD,
+    layout: str = "auto",
+) -> str:
+    """
+    Diagnostic label from coupling block-structure score (legacy / stats only).
+
+    Main figures always use the cluster-reordered matrix in panel a regardless of
+    this recommendation. ``block`` = score ≥ threshold; ``domain`` = diffuse coupling.
+    """
+    if layout == "block":
+        return "block"
+    if layout == "domain":
+        return "domain"
+    if separation_score >= threshold:
+        return "block"
+    return "domain"
+
+
+def _draw_conformation_domain_coupling_heatmap(
+    ax,
+    *,
+    corr: np.ndarray,
+    assignments: dict[str, list[int]],
+    domain_order: Sequence[str],
+    metric: str = "mean_abs",
+    abs_threshold: float = 0.5,
+    panel_letter: str | None = None,
+):
+    """Domain×domain mean |coupling| heatmap (supplementary figure). Returns mappable or None."""
+    import pandas as pd
+    import seaborn as sns
+
+    domain_mat, names = compute_domain_mean_coupling(
+        corr,
+        assignments,
+        domain_order=domain_order,
+        metric=metric,
+        abs_threshold=abs_threshold,
+    )
+    if not names:
+        ax.axis("off")
+        ax.text(
+            0.5,
+            0.5,
+            "Domain summary\nnot available\nfor this pair",
+            transform=ax.transAxes,
+            ha="center",
+            va="center",
+            fontsize=8,
+            color="0.45",
+        )
+        if panel_letter:
+            label_panel(ax, panel_letter)
+        return None
+
+    df = pd.DataFrame(domain_mat, index=names, columns=names)
+    if metric == "frac_strong":
+        fmt = ".0%"
+        title = f"Domain |coupling| > {abs_threshold:.1f}"
+        cbar_label = f"frac |r| > {abs_threshold:.1f}"
+        cmap = PALETTES["sequential"]
+    else:
+        fmt = ".2f"
+        title = "Domain mean |coupling|"
+        cbar_label = "mean |r|"
+        cmap = "YlOrRd"
+
+    hm = sns.heatmap(
+        df,
+        ax=ax,
+        annot=True,
+        fmt=fmt,
+        annot_kws={"size": 6},
+        square=True,
+        cbar=False,
+        vmin=0.0,
+        vmax=1.0,
+        cmap=cmap,
+        linewidths=0,
+        xticklabels=True,
+        yticklabels=True,
+    )
+    ax.set_xticklabels(ax.get_xticklabels(), rotation=45, ha="right", fontsize=7)
+    ax.set_yticklabels(ax.get_yticklabels(), rotation=0, fontsize=7)
+    ax.set_title(title, fontsize=7)
+    ax.set_xlabel("")
+    ax.set_ylabel("")
+    _apply_panel_style(ax)
+    if panel_letter:
+        label_panel(ax, panel_letter)
+    mappable = hm.collections[0] if hm.collections else None
+    return (mappable, cbar_label) if mappable is not None else None
+
+
+def _domain_scatter_colors(
+    use: Sequence[tuple[object, object]],
+    regions: Sequence[object],
+) -> list[str]:
+    """Per-residue hex colors for panel f from domain assignments."""
+    colors: list[str] = []
+    for row, _ in use:
+        color = UNASSIGNED_DOMAIN_COLOR
+        seq_num = int(row.seq_num)
+        for reg in regions:
+            if reg.seq_start <= seq_num <= reg.seq_end:
+                color = DOMAIN_COLORS.get(reg.name, reg.color)
+                break
+        colors.append(color)
+    return colors
+
+
+def _domain_name_per_residue(
+    use: Sequence[tuple[object, object]],
+    regions: Sequence[object],
+) -> list[str | None]:
+    """Domain name for each residue in chain order (None if unassigned)."""
+    names: list[str | None] = []
+    for row, _ in use:
+        domain: str | None = None
+        seq_num = int(row.seq_num)
+        for reg in regions:
+            if reg.seq_start <= seq_num <= reg.seq_end:
+                domain = reg.name
+                break
+        names.append(domain)
+    return names
+
+
+def _contiguous_domain_stretches(
+    domain_names: Sequence[str | None],
+) -> list[tuple[int, int, str | None]]:
+    """Inclusive start, exclusive end, domain label for each contiguous run."""
+    if not domain_names:
+        return []
+    stretches: list[tuple[int, int, str | None]] = []
+    start = 0
+    current = domain_names[0]
+    for i in range(1, len(domain_names)):
+        if domain_names[i] != current:
+            stretches.append((start, i, current))
+            start = i
+            current = domain_names[i]
+    stretches.append((start, len(domain_names), current))
+    return stretches
+
+
+def _per_domain_spearman_stats(
+    db: np.ndarray,
+    drel: np.ndarray,
+    assignments: dict[str, list[int]],
+    domain_order: Sequence[str],
+) -> list[tuple[str, float, int, str]]:
+    """Per-domain Spearman ρ(ΔB, Δrel): (name, rho, n, color)."""
+    from scipy.stats import spearmanr
+
+    stats: list[tuple[str, float, int, str]] = []
+    for name in domain_order:
+        idx = assignments.get(name, [])
+        color = DOMAIN_COLORS.get(name, UNASSIGNED_DOMAIN_COLOR)
+        if len(idx) < 3:
+            stats.append((name, float("nan"), len(idx), color))
+            continue
+        sub_db = np.asarray(db, dtype=np.float64)[idx]
+        sub_drel = np.asarray(drel, dtype=np.float64)[idx]
+        ok = np.isfinite(sub_db) & np.isfinite(sub_drel)
+        n_ok = int(ok.sum())
+        if n_ok < 3:
+            stats.append((name, float("nan"), n_ok, color))
+            continue
+        rho, _ = spearmanr(sub_db[ok], sub_drel[ok])
+        stats.append((name, float(rho) if np.isfinite(rho) else float("nan"), n_ok, color))
+    return stats
+
+
+def _draw_conformation_delta_reliability_profile(
+    ax,
+    *,
+    drel_full: np.ndarray,
+    row_mean: np.ndarray,
+    use_full: Sequence[tuple[object, object]],
+    regions: Sequence[object] | None,
+    domain_order: Sequence[str] | None,
+    panel_letter: str | None = "c",
+) -> None:
+    """Per-residue Δreliability along chain order, colored by domain, with |coupling| overlay."""
+    drel = np.asarray(drel_full, dtype=np.float64)
+    coupling_row = np.asarray(row_mean, dtype=np.float64)
+    n = int(drel.size)
+    assert coupling_row.size == n == len(use_full), (
+        "Δreliability and row-mean |coupling| must align to use_full residue order"
+    )
+
+    _apply_panel_style(ax)
+    x = np.arange(n, dtype=np.float64)
+
+    if regions:
+        domain_names = _domain_name_per_residue(use_full, regions)
+    else:
+        domain_names = [None] * n
+
+    for start, end, domain in _contiguous_domain_stretches(domain_names):
+        xs = x[start:end]
+        ys = drel[start:end]
+        color = (
+            DOMAIN_COLORS.get(domain, UNASSIGNED_DOMAIN_COLOR)
+            if domain
+            else UNASSIGNED_DOMAIN_COLOR
+        )
+        ax.fill_between(xs, 0.0, ys, where=ys < 0, color=color, alpha=0.4, linewidth=0)
+        ax.fill_between(xs, 0.0, ys, where=ys >= 0, color=color, alpha=0.4, linewidth=0)
+
+    for i in range(1, n):
+        if domain_names[i] != domain_names[i - 1]:
+            ax.axvline(i, color="#cccccc", ls="--", lw=0.75, zorder=0)
+
+    finite_drel = np.isfinite(drel)
+    max_abs = float(np.percentile(np.abs(drel[finite_drel]), 98)) if finite_drel.any() else 1.0
+    if not np.isfinite(max_abs) or max_abs <= 0:
+        max_abs = 1.0
+    y_lo, y_hi = -max_abs * 1.1, max_abs * 1.1
+    ax.set_ylim(y_lo, y_hi)
+
+    if regions and domain_order:
+        for name in domain_order:
+            idx = [i for i, d in enumerate(domain_names) if d == name]
+            if not idx:
+                continue
+            mid_x = 0.5 * (min(idx) + max(idx))
+            ax.text(
+                mid_x,
+                y_lo * 0.92,
+                name,
+                ha="center",
+                va="bottom",
+                fontsize=6,
+                color=DOMAIN_COLORS.get(name, UNASSIGNED_DOMAIN_COLOR),
+            )
+
+    ax.axhline(0.0, color="#999999", lw=0.5, zorder=1)
+
+    ax2 = ax.twinx()
+    ax2.plot(x, coupling_row, color="#333333", lw=0.75, alpha=0.5)
+    ax2.set_ylabel("mean |coupling|", fontsize=6)
+    ax2.spines["top"].set_visible(False)
+    ax2.spines["right"].set_linewidth(0.5)
+    ax2.tick_params(axis="y", which="major", labelsize=6, width=0.5, length=2)
+
+    x0, x1 = 0.0, float(max(n - 1, 0))
+    x_pad = 0.01 * max(1.0, x1 - x0)
+    ax.set_xlim(x0 - x_pad, x1 + x_pad)
+    ax.set_xlabel("Residue index (chain order)", fontsize=7)
+    ax.set_ylabel("Δreliability", fontsize=7)
+    ax.set_title("Per-residue Δreliability · colored by domain", fontsize=7)
+    if panel_letter is not None:
+        label_panel(ax, panel_letter)
+
+
+def _draw_conformation_clustered_coupling_panel(
+    ax,
+    *,
+    corr: np.ndarray,
+    order: np.ndarray,
+    hw: int,
+    separation_score: float | None = None,
+    panel_letter: str = "a",
+):
+    """Compact cluster-reordered coupling matrix for adaptive block-layout figures."""
+    corr_ord = corr[np.ix_(order, order)]
+    n = int(corr_ord.shape[0])
+    im = ax.imshow(
+        corr_ord,
+        origin="lower",
+        aspect="equal",
+        cmap=PALETTES["diverging"],
+        vmin=-1.0,
+        vmax=1.0,
+        interpolation="nearest",
+    )
+    title = f"Cluster-reordered coupling (±{hw})"
+    ax.set_title(title, fontsize=7)
+    ax.set_xlabel("Residue index (cluster order)", fontsize=7)
+    ax.set_ylabel("Residue index (cluster order)", fontsize=7)
+    tick_n = min(5, n)
+    tick_idx = np.linspace(0, n - 1, num=tick_n, dtype=int)
+    ax.set_xticks(tick_idx, [str(int(i)) for i in tick_idx], fontsize=5)
+    ax.set_yticks(tick_idx, [str(int(i)) for i in tick_idx], fontsize=5)
+    _apply_panel_style(ax)
+    label_panel(ax, panel_letter)
+    return im
+
+
+def _draw_conformation_summary_scatter_panel(
+    ax,
+    *,
+    db_full: np.ndarray,
+    drel_full: np.ndarray,
+    n_full: int,
+    emdb_a: str,
+    emdb_b: str,
+    spearman_rho: float | None,
+    use_full: Sequence[tuple[object, object]] | None = None,
+    regions: Sequence[object] | None = None,
+    domain_order: Sequence[str] | None = None,
+    panel_letter: str = "b",
+) -> None:
+    _apply_panel_style(ax)
+    point_colors: str | list[str] = UNASSIGNED_DOMAIN_COLOR
+    if use_full and regions:
+        point_colors = _domain_scatter_colors(use_full, regions)
+    ax.scatter(db_full, drel_full, s=8, alpha=0.6, c=point_colors, edgecolors="none")
+    ax.axhline(0, color="#999999", lw=0.5)
+    ax.axvline(0, color="#999999", lw=0.5)
+    x = np.asarray(db_full, dtype=np.float64)
+    y = np.asarray(drel_full, dtype=np.float64)
+    domain_rho_map: dict[str, float] = {}
+    if use_full and regions and domain_order:
+        assignments = get_domain_assignments(use_full, regions)
+        domain_rho_map = {
+            name: rho
+            for name, rho, _n, _color in _per_domain_spearman_stats(
+                db_full, drel_full, assignments, domain_order
+            )
+        }
+        for name in domain_order:
+            idx = assignments.get(name, [])
+            if len(idx) < 2:
+                continue
+            rho = domain_rho_map.get(name, float("nan"))
+            if not np.isfinite(rho) or rho > -0.2:
+                continue
+            sub_x = x[idx]
+            sub_y = y[idx]
+            ok = np.isfinite(sub_x) & np.isfinite(sub_y)
+            if ok.sum() < 2:
+                continue
+            coeffs = np.polyfit(sub_x[ok], sub_y[ok], 1)
+            xline = np.linspace(float(np.nanmin(sub_x[ok])), float(np.nanmax(sub_x[ok])), 100)
+            ls = "-" if rho <= -0.4 else "--"
+            ax.plot(
+                xline,
+                np.polyval(coeffs, xline),
+                ls,
+                color=DOMAIN_COLORS.get(name, UNASSIGNED_DOMAIN_COLOR),
+                lw=1.0,
+                alpha=0.85,
+                zorder=2,
+            )
+    ax.set_xlabel(f"ΔB_iso ({emdb_b} − {emdb_a})", fontsize=7)
+    ax.set_ylabel(f"Δreliability ({emdb_b} − {emdb_a})", fontsize=7)
+    ax.set_title("ΔB vs Δreliability", fontsize=7)
+    rho_txt = "n/a"
+    if spearman_rho is not None and np.isfinite(spearman_rho):
+        rho_txt = f"{spearman_rho:.2f}"
+    ax.text(
+        0.03,
+        0.97,
+        f"Spearman ρ = {rho_txt}\nn = {n_full}",
+        transform=ax.transAxes,
+        fontsize=7,
+        va="top",
+        ha="left",
+    )
+    if use_full and regions and domain_order:
+        from matplotlib.patches import Patch
+
+        assignments = get_domain_assignments(use_full, regions)
+        legend_patches = [
+            Patch(facecolor=DOMAIN_COLORS.get(name, UNASSIGNED_DOMAIN_COLOR), label=name)
+            for name in domain_order
+            if assignments.get(name)
+        ]
+        if legend_patches:
+            ax.legend(
+                handles=legend_patches,
+                loc="upper right",
+                fontsize=6,
+                frameon=False,
+                handlelength=1.0,
+                borderaxespad=0.3,
+            )
+    label_panel(ax, panel_letter)
+
+
+def plot_conformation_pair_domain_coupling_supplement(
+    pairs: Sequence[tuple[object, object]],
+    *,
+    emdb_a: str,
+    emdb_b: str,
+    in_mask_both: bool = True,
+    half_window: int | None = None,
+    coverage_note: str | None = None,
+    manifest: Path | None = None,
+    save_path: str | Path | None = None,
+    dpi: int = 150,
+) -> plt.Figure | None:
+    """Supplementary single-panel domain mean |coupling| heatmap."""
+    data = _conformation_pair_summary_data(
+        pairs, in_mask_both=in_mask_both, half_window=half_window
+    )
+    if data is None:
+        return None
+
+    reload_domain_colors()
+    regions = get_domain_regions_for_pair(emdb_a, emdb_b)
+    if not regions:
+        return None
+
+    domain_order = [reg.name for reg in regions]
+    assignments = get_domain_assignments(data["use_full"], regions)
+    corr_full = np.asarray(data["coupling"]["corr"], dtype=np.float64)
+    n_full = int(data["n_full"])
+
+    fig, ax = plt.subplots(figsize=(5.5, 4.8), facecolor="white")
+    result = _draw_conformation_domain_coupling_heatmap(
+        ax,
+        corr=corr_full,
+        assignments=assignments,
+        domain_order=domain_order,
+        metric="mean_abs",
+    )
+
+    coverage_str = coverage_note if coverage_note else ""
+    name_a = _cohort_display_name(emdb_a, manifest)
+    name_b = _cohort_display_name(emdb_b, manifest)
+    fig.suptitle(
+        f"{name_a} vs {name_b} · domain mean |coupling|",
+        fontsize=10,
+        fontweight="bold",
+        y=0.98,
+    )
+    fig.text(
+        0.5,
+        0.93,
+        f"EMD-{emdb_a} vs EMD-{emdb_b} · n = {n_full} in-mask Cα · coverage {coverage_str}",
+        fontsize=7,
+        ha="center",
+        color="#444444",
+    )
+
+    fig.canvas.draw()
+    if result is not None:
+        mappable, cbar_label = result
+        _add_anchor_colorbar(fig, mappable, ax, label=cbar_label, pad=0.04, width=0.025)
+
+    if save_path:
+        save_nature(fig, save_path, dpi=dpi)
+    return fig
 
 
 def plot_conformation_pair_summary_triptych(
@@ -1148,144 +1409,140 @@ def plot_conformation_pair_summary_triptych(
     in_mask_both: bool = True,
     half_window: int | None = None,
     spearman_rho: float | None = None,
+    spearman_rho_h: float | None = None,
     coverage_note: str | None = None,
     coords_b_aligned: np.ndarray | None = None,
+    cluster_separation_threshold: float = DEFAULT_CLUSTER_SEPARATION_THRESHOLD,
+    layout: str = "auto",
+    manifest: Path | None = None,
     save_path: str | Path | None = None,
     dpi: int = 150,
-) -> plt.Figure | None:
+) -> tuple[plt.Figure | None, str]:
     """
-    Three-panel conformation-pair summary for publication.
+    Conformation-pair summary triptych (14×10 in, three panels).
 
-    A) Coupling matrix + dendrogram, clustered (interior residues only).
-    B) Cα trace (state A) colored by row-mean |coupling|; optional aligned B overlay.
-    C) Per-residue ΔB vs Δreliability scatter with Spearman ρ.
+    Panel a is always the cluster-reordered coupling matrix (Pearson r colorbar).
+    Panels b–c: Δ scatter and full-width per-residue Δreliability profile.
+
+    Returns ``(figure, recommended_layout)`` where ``recommended_layout`` is the
+    legacy block/domain diagnostic from the cluster separation score (stats only).
     """
-    packed = _sorted_conformation_deltas(pairs, in_mask_both=in_mask_both)
-    if packed is None:
-        return None
-    use, db, drel, _chains = packed
-    n_full = len(use)
-    db_full, drel_full = db, drel
-    hw = half_window if half_window is not None else max(5, min(21, n_full // 25))
-    corr_full = _local_profile_cross_corr_matrix(db, drel, half_window=hw)
-    corr, db, drel, use, _idx = _coupling_interior_slice(
-        corr_full, db, drel, use, half_window=hw
+    del spearman_rho_h, coords_b_aligned
+    data = _conformation_pair_summary_data(
+        pairs, in_mask_both=in_mask_both, half_window=half_window
     )
-    n = len(use)
-    row_mean_abs = np.nanmean(np.abs(corr), axis=1)
-    order, z_link = _hierarchical_cluster(corr)
-    corr_ord = corr[np.ix_(order, order)]
+    if data is None:
+        return None, "domain"
 
-    coords = np.array([[a.x, a.y, a.z] for a, _ in use], dtype=np.float64)
-    color_vals = row_mean_abs
+    reload_domain_colors()
 
-    fig = plt.figure(figsize=(17.5, 5.8), facecolor="white", layout="constrained")
-    outer = fig.add_gridspec(1, 3, width_ratios=[1.55, 1.0, 0.95], wspace=0.22)
-    inner = outer[0].subgridspec(
-        2, 2, width_ratios=[0.08, 1.0], height_ratios=[0.08, 1.0], wspace=0.02, hspace=0.02
+    n_full = int(data["n_full"])
+    hw = int(data["hw"])
+    sep_score = float(data["cluster_separation_score"])
+    cluster_order = data["cluster_order"]
+    use_full = data["use_full"]
+    db_full = data["db_full"]
+    drel_full = data["drel_full"]
+    row_mean = data["row_mean"]
+    recommended_layout = select_conformation_pair_figure_layout(
+        sep_score, threshold=cluster_separation_threshold, layout=layout
     )
-    ax_corner = fig.add_subplot(inner[0, 0])
-    ax_dendro_top = fig.add_subplot(inner[0, 1])
-    ax_dendro_left = fig.add_subplot(inner[1, 0])
-    ax_a = fig.add_subplot(inner[1, 1])
-    ax_b = fig.add_subplot(outer[1], projection="3d")
-    ax_c = fig.add_subplot(outer[2])
 
-    ax_corner.axis("off")
+    regions = get_domain_regions_for_pair(emdb_a, emdb_b)
+    domain_order = [reg.name for reg in regions]
 
-    if z_link.size:
-        from scipy.cluster.hierarchy import dendrogram
+    coverage_str = coverage_note if coverage_note else ""
+    name_a = _cohort_display_name(emdb_a, manifest)
+    name_b = _cohort_display_name(emdb_b, manifest)
 
-        dendrogram(
-            z_link,
-            ax=ax_dendro_top,
-            orientation="top",
-            no_labels=True,
-            color_threshold=0,
-            above_threshold_color="0.25",
-        )
-        dendrogram(
-            z_link,
-            ax=ax_dendro_left,
-            orientation="left",
-            no_labels=True,
-            color_threshold=0,
-            above_threshold_color="0.25",
-        )
-    ax_dendro_top.axis("off")
-    ax_dendro_left.axis("off")
-
-    corr_cmap = plt.get_cmap("RdBu_r")
-    im_a = ax_a.imshow(
-        corr_ord,
-        origin="lower",
-        aspect="equal",
-        cmap=corr_cmap,
-        vmin=-1.0,
-        vmax=1.0,
-        interpolation="nearest",
+    fig = plt.figure(figsize=(14.0, 10.0), facecolor="white")
+    # Dedicated header band — keep suptitle/subtitle well above panel labels (y≈1.05).
+    fig.text(
+        0.5,
+        0.975,
+        f"{name_a} vs {name_b} · conformation pair summary",
+        ha="center",
+        va="top",
+        fontsize=11,
+        fontweight="bold",
     )
-    ax_a.set_xlabel("Clustered residue index", fontsize=9)
-    ax_a.set_ylabel("Clustered residue index", fontsize=9)
-    ax_a.set_title(f"A · Clustered coupling (±{hw} res.; n={n} interior)", fontsize=10)
-    tick_n = min(8, n)
-    tick_idx = np.linspace(0, n - 1, num=tick_n, dtype=int)
-    ax_a.set_xticks(tick_idx)
-    ax_a.set_yticks(tick_idx)
-    cbar_a = fig.colorbar(im_a, ax=ax_a, fraction=0.046, pad=0.02)
-    cbar_a.set_label("Pearson r", fontsize=8)
-
-    if coords_b_aligned is not None and coords_b_aligned.shape == coords.shape:
-        ax_b.scatter(
-            coords_b_aligned[:, 0],
-            coords_b_aligned[:, 1],
-            coords_b_aligned[:, 2],
-            c="0.75",
-            s=max(1.0, 800 / n),
-            alpha=0.35,
-            linewidths=0,
-            label=f"EMD-{emdb_b} (aligned)",
-        )
-    sc = ax_b.scatter(
-        coords[:, 0],
-        coords[:, 1],
-        coords[:, 2],
-        c=color_vals,
-        cmap="YlOrRd",
-        s=max(1.5, 1200 / n),
-        alpha=0.9,
-        linewidths=0,
-        label=f"EMD-{emdb_a}",
+    fig.text(
+        0.5,
+        0.948,
+        f"EMD-{emdb_a} vs EMD-{emdb_b} · n = {n_full} in-mask Cα · coverage {coverage_str}",
+        ha="center",
+        va="top",
+        fontsize=7,
+        color="#444444",
     )
-    _set_equal_3d_limits(ax_b, coords)
-    ax_b.view_init(elev=22, azim=-68)
-    ax_b.set_xlabel("x (Å)", fontsize=8, labelpad=-2)
-    ax_b.set_ylabel("y (Å)", fontsize=8, labelpad=-2)
-    ax_b.set_zlabel("z (Å)", fontsize=8, labelpad=-2)
-    ax_b.set_title("B · mean |coupling| on Cα (A frame)", fontsize=10)
-    ax_b.tick_params(labelsize=7, pad=0)
-    if coords_b_aligned is not None:
-        ax_b.legend(loc="upper left", fontsize=7, frameon=False)
-    cbar_b = fig.colorbar(sc, ax=ax_b, fraction=0.05, pad=0.08, shrink=0.75)
-    cbar_b.set_label("row-mean |r|", fontsize=8)
 
-    ax_c.scatter(db_full, drel_full, s=max(4, 6000 / n_full), alpha=0.35, c="#9467bd", edgecolors="none")
-    ax_c.axhline(0, color="0.5", lw=0.8)
-    ax_c.axvline(0, color="0.5", lw=0.8)
-    ax_c.set_xlabel(f"ΔB_iso ({emdb_b} − {emdb_a})", fontsize=9)
-    ax_c.set_ylabel(f"Δreliability ({emdb_b} − {emdb_a})", fontsize=9)
-    rho_txt = "n/a"
-    if spearman_rho is not None and np.isfinite(spearman_rho):
-        rho_txt = f"{spearman_rho:+.2f}"
-    ax_c.set_title(f"C · ΔB vs Δreliability (ρ = {rho_txt}; n={n_full})", fontsize=10)
+    gs = fig.add_gridspec(
+        2,
+        2,
+        height_ratios=[0.45, 0.55],
+        width_ratios=[0.45, 0.55],
+        hspace=0.38,
+        wspace=0.28,
+        left=0.08,
+        right=0.92,
+        top=0.82,
+        bottom=0.10,
+    )
 
-    subtitle = f"Conformation pair EMD-{emdb_a} vs EMD-{emdb_b} (n={n_full} in-mask Cα)"
-    if coverage_note:
-        subtitle += f" · {coverage_note}"
-    fig.suptitle(subtitle, fontsize=11)
+    im_cluster = None
+    ax_cluster = fig.add_subplot(gs[0, 0])
+    im_cluster = _draw_conformation_clustered_coupling_panel(
+        ax_cluster,
+        corr=data["corr_int"],
+        order=cluster_order,
+        hw=hw,
+        separation_score=sep_score,
+        panel_letter="a",
+    )
+
+    ax_b = fig.add_subplot(gs[0, 1])
+    _draw_conformation_summary_scatter_panel(
+        ax_b,
+        db_full=db_full,
+        drel_full=drel_full,
+        n_full=n_full,
+        emdb_a=emdb_a,
+        emdb_b=emdb_b,
+        spearman_rho=spearman_rho,
+        use_full=use_full,
+        regions=regions or None,
+        domain_order=domain_order or None,
+        panel_letter="b",
+    )
+
+    ax_c = fig.add_subplot(gs[1, :])
+    _draw_conformation_delta_reliability_profile(
+        ax_c,
+        drel_full=drel_full,
+        row_mean=row_mean,
+        use_full=use_full,
+        regions=regions or None,
+        domain_order=domain_order or None,
+        panel_letter=None,
+    )
+
+    fig.canvas.draw()
+    if im_cluster is not None and ax_cluster is not None:
+        cbar = fig.colorbar(im_cluster, ax=ax_cluster, fraction=0.046, pad=0.06)
+        cbar.set_label("Pearson r", fontsize=7)
+        cbar.ax.tick_params(labelsize=6, length=2)
+
+    fig.canvas.draw()
+    pos_a = ax_cluster.get_position()
+    pos_b = ax_b.get_position()
+    pos_c = ax_c.get_position()
+    full_width = pos_b.x1 - pos_a.x0
+    ax_c.set_position([pos_a.x0, pos_c.y0, full_width, pos_c.height])
+    label_panel(ax_c, "c", x=-0.1 * pos_a.width / full_width)
+
     if save_path:
-        fig.savefig(save_path, dpi=dpi, bbox_inches="tight", facecolor="white")
-    return fig
+        save_nature(fig, save_path, dpi=dpi)
+    return fig, recommended_layout
 
 
 __all__ = [
@@ -1305,9 +1562,10 @@ __all__ = [
     "collect_cohort_metrics",
     "write_cohort_metrics_csv",
     "plot_cohort_metrics_heatmap",
-    "plot_conformation_sequence_strip",
-    "plot_conformation_pair_coupling_heatmap",
-    "plot_conformation_delta_joint_heatmap",
     "plot_conformation_pair_summary_triptych",
+    "plot_conformation_pair_domain_coupling_supplement",
     "compute_conformation_coupling",
+    "compute_coupling_cluster_separation_score",
+    "select_conformation_pair_figure_layout",
+    "DEFAULT_CLUSTER_SEPARATION_THRESHOLD",
 ]

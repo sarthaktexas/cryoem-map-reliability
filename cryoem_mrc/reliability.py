@@ -151,7 +151,7 @@ def save_reliability_mrc(
     *,
     label: str = "reliability_score (cryoem_mrc)",
 ) -> Path:
-    """Write reliability volume on the reference grid for ChimeraX."""
+    """Write reliability volume on the reference grid."""
     reference_path = Path(reference_path)
     if out_path is None:
         out_path = reference_path.with_name(f"{reference_path.stem}_reliability.mrc")
@@ -168,7 +168,7 @@ def save_build_zone_mrc(
     zones: np.ndarray,
     out_path: str | Path | None = None,
 ) -> Path:
-    """Write build-zone labels (0/1/2) as MRC for ChimeraX."""
+    """Write build-zone labels (0/1/2) as MRC on the reference grid."""
     reference_path = Path(reference_path)
     if out_path is None:
         out_path = reference_path.with_name(f"{reference_path.stem}_build_zones.mrc")

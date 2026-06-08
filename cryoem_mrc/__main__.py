@@ -110,11 +110,16 @@ def main() -> int:
         help="Contour on reference for build_zone labels (default 0.116)",
     )
     p.add_argument(
+        "--no-crop-to-contour",
+        action="store_true",
+        help="Feature extraction on full grid (default: crop to reference contour bbox)",
+    )
+    p.add_argument(
         "--reliability-mrc-out",
         type=Path,
         default=None,
         metavar="PATH",
-        help="Write reliability_score MRC (ChimeraX); requires --half1 and --half2",
+        help="Write reliability_score MRC; requires --half1 and --half2",
     )
     p.add_argument(
         "--rigidity-mrc-out",
@@ -145,9 +150,23 @@ def main() -> int:
         out = args.mrc.with_name(f"{args.mrc.stem}_features.npz")
 
     rel_mask = None
-    if args.half1 and args.half2 and (args.reference or args.build_zone_mrc_out):
-        ref_path = args.reference or args.mrc
-        rel_mask = build_contour_mask(load_mrc(ref_path, dtype=np.float32), args.contour)
+    crop_bbox = None
+    ref_for_mask = args.reference
+    if ref_for_mask is None and (args.half1 and args.half2 and args.build_zone_mrc_out):
+        ref_for_mask = args.mrc
+    if ref_for_mask is not None:
+        from .mask_bbox import bbox_from_contour, format_bbox_log, pad_voxels_for_filters
+
+        ref_vol = load_mrc(ref_for_mask, dtype=np.float32 if args.float32 else np.float64)
+        rel_mask = build_contour_mask(ref_vol, args.contour)
+        if not args.no_crop_to_contour:
+            sigmas = tuple(args.sigmas) if args.sigmas is not None else (0.5, 1.0, 2.0, 4.0, 8.0)
+            pad = pad_voxels_for_filters(window=args.local_window, gaussian_sigmas=sigmas)
+            crop_bbox = bbox_from_contour(ref_vol, args.contour, pad=pad)
+            print(
+                f"[cryoem_mrc] contour crop: {format_bbox_log(crop_bbox, ref_vol.shape, pad=pad)}",
+                flush=True,
+            )
 
     feats = run_pipeline(
         args.mrc,
@@ -161,6 +180,7 @@ def main() -> int:
         half1_path=args.half1,
         half2_path=args.half2,
         reliability_mask=rel_mask,
+        crop_bbox=crop_bbox,
         compute_reliability=bool(args.half1 and args.half2),
         plot=args.plot or (args.plot_save is not None),
         plot_save=args.plot_save,
@@ -173,14 +193,14 @@ def main() -> int:
             print("Error: --rigidity-mrc-out requires --rigidity.", file=sys.stderr)
             return 2
         mrc_out = save_rigidity_mrc(args.mrc, feats["rigidity"], args.rigidity_mrc_out)
-        print(f"Wrote rigidity MRC for ChimeraX: {mrc_out}")
+        print(f"Wrote rigidity MRC: {mrc_out}")
     ref_for_mrc = args.reference or args.mrc
     if args.reliability_mrc_out is not None:
         if "reliability_score" not in feats:
             print("Error: --reliability-mrc-out requires --half1 and --half2.", file=sys.stderr)
             return 2
         mrc_out = save_reliability_mrc(ref_for_mrc, feats["reliability_score"], args.reliability_mrc_out)
-        print(f"Wrote reliability MRC for ChimeraX: {mrc_out}")
+        print(f"Wrote reliability MRC: {mrc_out}")
     if args.build_zone_mrc_out is not None:
         if "build_zone" not in feats:
             print(
@@ -189,7 +209,7 @@ def main() -> int:
             )
             return 2
         mrc_out = save_build_zone_mrc(ref_for_mrc, feats["build_zone"], args.build_zone_mrc_out)
-        print(f"Wrote build-zone MRC for ChimeraX: {mrc_out}")
+        print(f"Wrote build-zone MRC: {mrc_out}")
     print(f"Wrote {len(feats)} feature maps to {out}")
     return 0
 

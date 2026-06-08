@@ -8,6 +8,8 @@ from typing import Sequence
 import matplotlib.pyplot as plt
 import numpy as np
 
+from style.nature import apply, label_panel, savefig as save_nature
+
 
 def rigidity_inspection_keys(features: dict[str, np.ndarray]) -> list[str]:
     """
@@ -92,7 +94,8 @@ def plot_feature_slices(
         axes = np.array([axes])
 
     overrides = cmap_overrides or {}
-    for ax, name in zip(axes, keys):
+    for i, (ax, name) in enumerate(zip(axes, keys)):
+        apply(ax)
         vol = np.asarray(feature_maps[name])
         if vol.ndim != 3:
             raise ValueError(f"{name}: expected 3D array, got {vol.shape}")
@@ -117,9 +120,12 @@ def plot_feature_slices(
             ax.set_ylabel("Z (rows)")
         fig.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
 
+    for i, ax in enumerate(axes):
+        label_panel(ax, chr(ord("a") + i))
+
     fig.tight_layout()
     if save_path is not None:
-        fig.savefig(save_path, dpi=150, bbox_inches="tight")
+        save_nature(fig, save_path)
     if show:
         plt.show()
     return fig
@@ -141,19 +147,23 @@ def plot_central_orthogonal_slices(
     iz, iy, ix = nz // 2, ny // 2, nx // 2
     fig, axes = plt.subplots(1, 3, figsize=figsize)
     im0 = axes[0].imshow(vol[iz], cmap=cmap, origin="lower")
+    apply(axes[0])
     axes[0].set_title(f"XY plane (z = {iz})")
     axes[0].set_xlabel("x"); axes[0].set_ylabel("y")
     im1 = axes[1].imshow(vol[:, iy, :], cmap=cmap, origin="lower")
+    apply(axes[1])
     axes[1].set_title(f"XZ plane (y = {iy})")
     axes[1].set_xlabel("x"); axes[1].set_ylabel("z")
     im2 = axes[2].imshow(vol[:, :, ix], cmap=cmap, origin="lower")
+    apply(axes[2])
     axes[2].set_title(f"YZ plane (x = {ix})")
     axes[2].set_xlabel("y"); axes[2].set_ylabel("z")
-    for ax, im in zip(axes, (im0, im1, im2)):
+    for letter, ax, im in zip("abc", axes, (im0, im1, im2)):
+        label_panel(ax, letter)
         fig.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
     fig.tight_layout()
     if save_path is not None:
-        fig.savefig(save_path, dpi=150, bbox_inches="tight")
+        save_nature(fig, save_path)
     if show:
         plt.show()
     return fig
@@ -180,13 +190,14 @@ def plot_volume_histogram(
         lo, hi = np.percentile(v, percentile_clip)
         v = v[(v >= lo) & (v <= hi)]
     fig, ax = plt.subplots(figsize=(6.0, 4.0))
+    apply(ax)
     ax.hist(v, bins=bins, density=density, color="gray", edgecolor="none", alpha=0.9)
     ax.set_xlabel("intensity")
     ax.set_ylabel("density" if density else "count")
     ax.set_title(title or "Voxel intensity histogram")
     fig.tight_layout()
     if save_path is not None:
-        fig.savefig(save_path, dpi=150, bbox_inches="tight")
+        save_nature(fig, save_path)
     if show:
         plt.show()
     return fig

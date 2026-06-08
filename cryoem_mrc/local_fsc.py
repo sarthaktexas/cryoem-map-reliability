@@ -253,7 +253,7 @@ def _spread_patch_resolutions_to_mask(
 
     Uses linear interpolation inside the convex hull of patch centers, then
     nearest-patch values elsewhere. Does **not** fill the full map box with a
-    global median (that produced a misleading rectangular field in ChimeraX).
+    global median (that produced a misleading rectangular field in 3D viewers).
     """
     fill = fallback if np.isfinite(fallback) else np.nan
     full = np.full(full_shape, fill, dtype=np.float32)
@@ -430,7 +430,7 @@ def save_local_fsc_resolution_mrc(
     Save resolution map on the reference grid with MRC labels for ``local_fsc`` inference.
 
     Voxels outside ``mask`` (or non-finite values) are set to ``solvent_value`` (default 0)
-    so ChimeraX does not draw a misleading NaN bounding cube around the map.
+    so map viewers do not draw a misleading NaN bounding cube around the map.
     """
     reference_mrc_path = Path(reference_mrc_path)
     out_path = Path(out_path)

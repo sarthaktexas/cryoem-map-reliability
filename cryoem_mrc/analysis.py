@@ -46,6 +46,7 @@ import numpy as np
 from scipy import ndimage, stats
 
 from .half_map_repro import half_map_local_metrics
+from .mask_bbox import VolumeBbox, bbox_from_mask, crop_array, embed_array
 
 
 # ---------------------------------------------------------------------------
@@ -123,6 +124,36 @@ def half_map_local_metrics_chunked(
         z0 = z1
 
     return out
+
+
+def half_map_local_metrics_chunked_bbox(
+    half1: np.ndarray,
+    half2: np.ndarray,
+    mask: np.ndarray,
+    *,
+    window: int = 5,
+    chunk_z: int = 64,
+    pad: int | None = None,
+    eps: float = 1e-12,
+    out_dtype: type[np.float32] | type[np.float64] = np.float32,
+) -> dict[str, np.ndarray]:
+    """
+    Half-map metrics on a tight bbox around ``mask`` (+ halo), embedded on the full grid.
+
+    In-mask voxels away from the bbox edge match the full-volume routine within float noise.
+    """
+    pad_v = int(window // 2) if pad is None else int(pad)
+    bbox = bbox_from_mask(mask, pad=pad_v)
+    cropped = half_map_local_metrics_chunked(
+        crop_array(half1, bbox),
+        crop_array(half2, bbox),
+        window=window,
+        chunk_z=chunk_z,
+        eps=eps,
+        out_dtype=out_dtype,
+    )
+    shape = half1.shape
+    return {k: embed_array(shape, bbox, v, dtype=out_dtype) for k, v in cropped.items()}
 
 
 # ---------------------------------------------------------------------------
@@ -476,6 +507,8 @@ def plot_halfmap_metric_histogram(
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
 
+    from style.nature import apply, label_panel, savefig as save_nature
+
     keys = list(metric_keys) if metric_keys is not None else list(metrics.keys())
     n = len(keys)
     if n == 0:
@@ -488,6 +521,7 @@ def plot_halfmap_metric_histogram(
     mask_b = np.asarray(mask).astype(bool)
     for i, k in enumerate(keys):
         ax = flat[i]
+        apply(ax)
         v = np.asarray(metrics[k])
         inside = v[mask_b]
         outside = v[~mask_b]
@@ -507,6 +541,7 @@ def plot_halfmap_metric_histogram(
         ax.set_xlabel(k)
         ax.set_ylabel("density")
         ax.legend(fontsize=8, loc="best")
+        label_panel(ax, chr(ord("a") + i))
     for j in range(n, len(flat)):
         flat[j].set_visible(False)
     if title:
@@ -516,7 +551,7 @@ def plot_halfmap_metric_histogram(
         fig.tight_layout()
     save_path = Path(save_path)
     save_path.parent.mkdir(parents=True, exist_ok=True)
-    fig.savefig(save_path, dpi=150, bbox_inches="tight")
+    save_nature(fig, save_path)
     plt.close(fig)
     return save_path
 
@@ -542,6 +577,8 @@ def plot_feature_vs_target_scatter(
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
 
+    from style.nature import apply, savefig as save_nature
+
     f = _flatten_under_mask(feature, mask)
     t = _flatten_under_mask(target, mask)
     finite = np.isfinite(f) & np.isfinite(t)
@@ -555,6 +592,7 @@ def plot_feature_vs_target_scatter(
         f_plot, t_plot = f, t
 
     fig, ax = plt.subplots(figsize=(6.0, 5.0))
+    apply(ax)
     hb = ax.hexbin(t_plot, f_plot, gridsize=60, mincnt=1, cmap="viridis", bins="log")
     fig.colorbar(hb, ax=ax, label="log(count)")
     if binned is not None:
@@ -577,7 +615,7 @@ def plot_feature_vs_target_scatter(
     fig.tight_layout()
     save_path = Path(save_path)
     save_path.parent.mkdir(parents=True, exist_ok=True)
-    fig.savefig(save_path, dpi=150, bbox_inches="tight")
+    save_nature(fig, save_path)
     plt.close(fig)
     return save_path
 
@@ -590,6 +628,7 @@ __all__ = [
     "build_contour_mask",
     "compute_feature_target_correlations",
     "half_map_local_metrics_chunked",
+    "half_map_local_metrics_chunked_bbox",
     "plot_feature_vs_target_scatter",
     "plot_halfmap_metric_histogram",
     "write_correlation_csv",
