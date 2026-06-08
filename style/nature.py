@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 
 import matplotlib as mpl
@@ -34,6 +35,9 @@ _NATURE_RC = {
 }
 
 mpl.rcParams.update(_NATURE_RC)
+
+# macOS Helvetica/Arial often trigger benign fontTools table-parse warnings on save.
+logging.getLogger("fontTools").setLevel(logging.ERROR)
 
 # Muted Nature-style qualitative colors (blues, reds, greens, oranges — no neons).
 _CATEGORICAL = [

@@ -21,6 +21,7 @@ from .conformation_pair import (
     get_domain_assignments,
     get_domain_regions_for_pair,
     interior_residue_indices,
+    region_matches_residue,
     reload_domain_colors,
 )
 from .repo_paths import COHORT_MANIFEST, OUTPUTS_ROOT
@@ -549,9 +550,96 @@ class CohortMetricRow:
     rel_vs_cc: float
     partial_rel_given_var: float
     b_vs_rel: float = float("nan")
+    display_name: str = ""
+    protein_class: str = "Other"
+    flexibility_source: str = ""
+    n_mask: int = 0
+    n_residues: float = float("nan")
 
 
-def collect_cohort_metrics(outputs_root: Path | None = None) -> list[CohortMetricRow]:
+def _load_manifest_index(manifest_path: Path = COHORT_MANIFEST) -> dict[str, dict[str, str]]:
+    """Index ``cohort/manifest.csv`` rows by ``emdb_id``."""
+    index: dict[str, dict[str, str]] = {}
+    if not manifest_path.is_file():
+        return index
+    with manifest_path.open(newline="") as f:
+        for row in csv.DictReader(f):
+            eid = str(row.get("emdb_id", "")).strip()
+            if eid:
+                index[eid] = row
+    return index
+
+
+def infer_protein_class(display_name: str, flexibility_source: str = "") -> str:
+    """
+    Coarse architectural class for cohort stratification plots.
+
+    Keyword rules on ``display_name``; falls back to ``flexibility_source`` when
+    no structural keyword matches.
+    """
+    name = display_name.lower()
+    if "apoferritin" in name:
+        return "Rigid control"
+    if any(k in name for k in ("ribosome", "70s")):
+        return "Ribosome"
+    if any(
+        k in name
+        for k in (
+            "trpv",
+            "beta2ar",
+            "eag",
+            "enac",
+            "glp",
+            "nmda",
+            "receptor",
+            "channel",
+        )
+    ):
+        return "Ion channel / receptor"
+    if any(
+        k in name
+        for k in (
+            "mgt",
+            "msba",
+            "p97",
+            "vcp",
+            "atpase",
+            "atp synthase",
+            "v-atpase",
+        )
+    ):
+        return "ATPase / transporter"
+    if any(k in name for k in ("groel", "clpb")):
+        return "Chaperone / AAA+"
+    if "proteasome" in name:
+        return "Proteasome"
+    if any(k in name for k in ("spike", "hsv", " gB")):
+        return "Viral glycoprotein"
+    if any(k in name for k in ("beta-gal", "betagal", "lrrk", "complex iii", "spliceosome")):
+        return "Large enzyme / assembly"
+    if any(k in name for k in ("nucleosome", "ribozyme")):
+        return "Nucleic acid"
+    if flexibility_source == "halfmap_cc_only":
+        return "CC-only (no model)"
+    if flexibility_source == "conformational_pair":
+        return "Conformation pair"
+    return "Other"
+
+
+def cohort_protein_size(row: CohortMetricRow) -> float:
+    """Primary size axis: deposited Cα count when available, else masked voxels."""
+    if np.isfinite(row.n_residues) and row.n_residues > 0:
+        return float(row.n_residues)
+    if row.n_mask > 0:
+        return float(row.n_mask)
+    return float("nan")
+
+
+def collect_cohort_metrics(
+    outputs_root: Path | None = None,
+    *,
+    manifest_path: Path = COHORT_MANIFEST,
+) -> list[CohortMetricRow]:
     """
     Gather Spearman summaries from ``outputs/emd_<ID>/lh_map_reliability/``.
 
@@ -559,6 +647,7 @@ def collect_cohort_metrics(outputs_root: Path | None = None) -> list[CohortMetri
     ``bfactor_validation_stats.json`` (residue-level B vs reliability).
     """
     root = OUTPUTS_ROOT if outputs_root is None else Path(outputs_root)
+    manifest = _load_manifest_index(manifest_path)
     rows: list[CohortMetricRow] = []
     for meta_path in sorted(root.glob("emd_*/lh_map_reliability/run_metadata.json")):
         emdb_id = meta_path.parent.parent.name.removeprefix("emd_")
@@ -566,12 +655,18 @@ def collect_cohort_metrics(outputs_root: Path | None = None) -> list[CohortMetri
             meta = json.load(f)
         spearman = meta.get("spearman", {})
         partial = meta.get("partial", {})
+        n_mask = int(meta.get("n_mask", 0))
         b_vs_rel = float("nan")
+        n_residues = float("nan")
         bfac_path = meta_path.parent / "bfactor_validation_stats.json"
         if bfac_path.is_file():
             with bfac_path.open() as f:
                 bfac = json.load(f)
             b_vs_rel = float(bfac.get("spearman_b_vs_reliability", float("nan")))
+            n_residues = float(bfac.get("n_residues", float("nan")))
+        mrow = manifest.get(emdb_id, {})
+        display_name = str(mrow.get("display_name", "")).strip() or f"EMD-{emdb_id}"
+        flex_src = str(mrow.get("flexibility_source", "")).strip()
         rows.append(
             CohortMetricRow(
                 emdb_id=emdb_id,
@@ -579,6 +674,11 @@ def collect_cohort_metrics(outputs_root: Path | None = None) -> list[CohortMetri
                 rel_vs_cc=float(spearman.get("reliability_score", float("nan"))),
                 partial_rel_given_var=float(partial.get("reliability_score", float("nan"))),
                 b_vs_rel=b_vs_rel,
+                display_name=display_name,
+                protein_class=infer_protein_class(display_name, flex_src),
+                flexibility_source=flex_src,
+                n_mask=n_mask,
+                n_residues=n_residues,
             )
         )
     return rows
@@ -589,6 +689,11 @@ def write_cohort_metrics_csv(rows: Sequence[CohortMetricRow], path: str | Path) 
     path = Path(path)
     fieldnames = [
         "emdb_id",
+        "display_name",
+        "protein_class",
+        "flexibility_source",
+        "n_residues",
+        "n_mask",
         "var_vs_cc",
         "rel_vs_cc",
         "partial_rel_given_var",
@@ -601,6 +706,15 @@ def write_cohort_metrics_csv(rows: Sequence[CohortMetricRow], path: str | Path) 
             w.writerow(
                 {
                     "emdb_id": row.emdb_id,
+                    "display_name": row.display_name,
+                    "protein_class": row.protein_class,
+                    "flexibility_source": row.flexibility_source,
+                    "n_residues": (
+                        f"{int(row.n_residues)}"
+                        if np.isfinite(row.n_residues) and row.n_residues > 0
+                        else ""
+                    ),
+                    "n_mask": row.n_mask,
                     "var_vs_cc": f"{row.var_vs_cc:.6f}",
                     "rel_vs_cc": f"{row.rel_vs_cc:.6f}",
                     "partial_rel_given_var": f"{row.partial_rel_given_var:.6f}",
@@ -668,6 +782,207 @@ def plot_cohort_metrics_heatmap(
     return fig
 
 
+def _cohort_class_colors(classes: Sequence[str]) -> dict[str, str]:
+    palette = list(PALETTES["categorical"])
+    return {cls: palette[i % len(palette)] for i, cls in enumerate(classes)}
+
+
+def plot_cohort_size_vs_reliability(
+    rows: Sequence[CohortMetricRow],
+    *,
+    save_path: str | Path | None = None,
+    dpi: int = 200,
+) -> plt.Figure:
+    """
+    Scatter of protein size vs masked-voxel reliability ↔ half-map CC (ρ).
+
+    Size uses deposited Cα count when a PDB validation exists; otherwise masked
+    voxels (square markers). Reports cohort Spearman ρ between size and ρ(rel, CC).
+    """
+    from scipy import stats
+
+    if not rows:
+        raise ValueError("No cohort metric rows to plot")
+
+    usable = [
+        r
+        for r in rows
+        if np.isfinite(r.rel_vs_cc) and np.isfinite(cohort_protein_size(r))
+    ]
+    if len(usable) < 2:
+        raise ValueError("Need at least two maps with finite size and rel_vs_cc")
+
+    classes = sorted({r.protein_class for r in usable})
+    colors = _cohort_class_colors(classes)
+
+    sizes = np.array([cohort_protein_size(r) for r in usable], dtype=np.float64)
+    rels = np.array([r.rel_vs_cc for r in usable], dtype=np.float64)
+    has_residue = np.array(
+        [np.isfinite(r.n_residues) and r.n_residues > 0 for r in usable],
+        dtype=bool,
+    )
+
+    fig, ax = plt.subplots(figsize=(6.5, 4.5))
+    apply(ax)
+    for cls in classes:
+        idx = [i for i, r in enumerate(usable) if r.protein_class == cls]
+        if not idx:
+            continue
+        color = colors[cls]
+        idx_res = [i for i in idx if has_residue[i]]
+        idx_mask = [i for i in idx if not has_residue[i]]
+        labeled = False
+        if idx_res:
+            ax.scatter(
+                sizes[idx_res],
+                rels[idx_res],
+                s=36,
+                c=color,
+                alpha=0.85,
+                edgecolors="white",
+                linewidths=0.4,
+                marker="o",
+                label=cls,
+            )
+            labeled = True
+        if idx_mask:
+            ax.scatter(
+                sizes[idx_mask],
+                rels[idx_mask],
+                s=42,
+                c=color,
+                alpha=0.85,
+                edgecolors="white",
+                linewidths=0.4,
+                marker="s",
+                label=None if labeled else cls,
+            )
+
+    rho_size, p_size = stats.spearmanr(sizes, rels)
+    ax.set_xscale("log")
+    ax.set_xlabel("Protein size (Cα residues or masked voxels, log scale)")
+    ax.set_ylabel("Reliability vs half-map CC (Spearman ρ)")
+    ax.set_title("Cohort: size vs reliability–CC agreement")
+    ax.axhline(0.0, color="0.75", linewidth=0.6, linestyle="--")
+    ax.set_ylim(-0.05, 1.02)
+    ax.text(
+        0.03,
+        0.03,
+        f"ρ(size, rel vs CC) = {rho_size:+.2f}  (p = {p_size:.2g}, n = {len(usable)})",
+        transform=ax.transAxes,
+        fontsize=7,
+        va="bottom",
+        ha="left",
+        bbox={"boxstyle": "round,pad=0.25", "facecolor": "white", "edgecolor": "0.85", "alpha": 0.9},
+    )
+
+    for i, row in enumerate(usable):
+        if len(usable) <= 18:
+            ax.annotate(
+                row.emdb_id,
+                (sizes[i], rels[i]),
+                textcoords="offset points",
+                xytext=(4, 3),
+                fontsize=5,
+                color="0.35",
+            )
+
+    handles, labels = ax.get_legend_handles_labels()
+    if handles:
+        ax.legend(
+            handles,
+            labels,
+            loc="lower left",
+            bbox_to_anchor=(1.02, 0),
+            frameon=False,
+            fontsize=6,
+        )
+    fig.tight_layout()
+    if save_path:
+        save_nature(fig, save_path, dpi=dpi)
+    return fig
+
+
+def plot_cohort_reliability_by_class(
+    rows: Sequence[CohortMetricRow],
+    *,
+    save_path: str | Path | None = None,
+    dpi: int = 200,
+) -> plt.Figure:
+    """
+    Box-and-strip summary of reliability ↔ CC by coarse protein class.
+
+    Classes are ordered by median ρ; each point is one map.
+    """
+    if not rows:
+        raise ValueError("No cohort metric rows to plot")
+
+    usable = [r for r in rows if np.isfinite(r.rel_vs_cc)]
+    if not usable:
+        raise ValueError("No maps with finite rel_vs_cc")
+
+    by_class: dict[str, list[CohortMetricRow]] = {}
+    for row in usable:
+        by_class.setdefault(row.protein_class, []).append(row)
+
+    classes = sorted(
+        by_class,
+        key=lambda c: float(np.median([r.rel_vs_cc for r in by_class[c]])),
+        reverse=True,
+    )
+    colors = _cohort_class_colors(classes)
+
+    data = [[r.rel_vs_cc for r in by_class[c]] for c in classes]
+    positions = np.arange(1, len(classes) + 1, dtype=np.float64)
+
+    fig_w = max(6.0, 0.85 * len(classes) + 2.5)
+    fig, ax = plt.subplots(figsize=(fig_w, 4.5))
+    apply(ax)
+
+    bp = ax.boxplot(
+        data,
+        positions=positions,
+        widths=0.55,
+        patch_artist=True,
+        showfliers=False,
+        medianprops={"color": "0.15", "linewidth": 1.0},
+        boxprops={"linewidth": 0.6},
+        whiskerprops={"linewidth": 0.6},
+        capprops={"linewidth": 0.6},
+    )
+    for patch, cls in zip(bp["boxes"], classes):
+        patch.set_facecolor(colors[cls])
+        patch.set_alpha(0.35)
+        patch.set_edgecolor(colors[cls])
+
+    rng = np.random.default_rng(0)
+    for pos, cls, vals in zip(positions, classes, data):
+        jitter = rng.uniform(-0.12, 0.12, size=len(vals))
+        ax.scatter(
+            pos + jitter,
+            vals,
+            s=28,
+            c=colors[cls],
+            alpha=0.9,
+            edgecolors="white",
+            linewidths=0.35,
+            zorder=3,
+        )
+
+    cohort_median = float(np.median([r.rel_vs_cc for r in usable]))
+    ax.axhline(cohort_median, color="0.45", linewidth=0.7, linestyle=":", label=f"cohort median ({cohort_median:.2f})")
+
+    ax.set_xticks(positions, classes, rotation=30, ha="right", fontsize=7)
+    ax.set_ylabel("Reliability vs half-map CC (Spearman ρ)")
+    ax.set_title("Cohort: reliability–CC agreement by protein class")
+    ax.set_ylim(-0.05, 1.02)
+    ax.legend(loc="lower right", frameon=False, fontsize=6)
+    fig.tight_layout()
+    if save_path:
+        save_nature(fig, save_path, dpi=dpi)
+    return fig
+
+
 def _sorted_conformation_deltas(
     pairs: Sequence[tuple[object, object]],
     *,
@@ -714,13 +1029,20 @@ def _local_profile_cross_corr_matrix(
             win_a[i] = a[i0:i1]
             win_b[i] = b[i0:i1]
 
-    mean_a = np.nanmean(win_a, axis=1, keepdims=True)
-    mean_b = np.nanmean(win_b, axis=1, keepdims=True)
-    std_a = np.nanstd(win_a, axis=1, ddof=0, keepdims=True)
-    std_b = np.nanstd(win_b, axis=1, ddof=0, keepdims=True)
+    full_win = np.all(np.isfinite(win_a), axis=1) & np.all(np.isfinite(win_b), axis=1)
+    mean_a = np.full((n, 1), np.nan, dtype=np.float64)
+    mean_b = np.full((n, 1), np.nan, dtype=np.float64)
+    std_a = np.full((n, 1), np.nan, dtype=np.float64)
+    std_b = np.full((n, 1), np.nan, dtype=np.float64)
+    if full_win.any():
+        wa = win_a[full_win]
+        wb = win_b[full_win]
+        mean_a[full_win] = wa.mean(axis=1, keepdims=True)
+        mean_b[full_win] = wb.mean(axis=1, keepdims=True)
+        std_a[full_win] = wa.std(axis=1, ddof=0, keepdims=True)
+        std_b[full_win] = wb.std(axis=1, ddof=0, keepdims=True)
     valid = (
-        np.all(np.isfinite(win_a), axis=1)
-        & np.all(np.isfinite(win_b), axis=1)
+        full_win
         & np.isfinite(std_a[:, 0])
         & np.isfinite(std_b[:, 0])
         & (std_a[:, 0] > 0)
@@ -752,7 +1074,10 @@ def compute_conformation_coupling(
     n = len(use)
     hw = half_window if half_window is not None else max(5, min(21, n // 25))
     corr = _local_profile_cross_corr_matrix(db, drel, half_window=hw)
-    row_mean_abs = np.nanmean(np.abs(corr), axis=1)
+    row_mean_abs = np.full(n, np.nan, dtype=np.float64)
+    has_finite = np.any(np.isfinite(corr), axis=1)
+    if has_finite.any():
+        row_mean_abs[has_finite] = np.nanmean(np.abs(corr[has_finite]), axis=1)
     corr_i, db_i, drel_i, use_i, idx = _coupling_interior_slice(
         corr, db, drel, use, half_window=hw
     )
@@ -1054,9 +1379,8 @@ def _domain_scatter_colors(
     colors: list[str] = []
     for row, _ in use:
         color = UNASSIGNED_DOMAIN_COLOR
-        seq_num = int(row.seq_num)
         for reg in regions:
-            if reg.seq_start <= seq_num <= reg.seq_end:
+            if region_matches_residue(reg, row):
                 color = DOMAIN_COLORS.get(reg.name, reg.color)
                 break
         colors.append(color)
@@ -1071,9 +1395,8 @@ def _domain_name_per_residue(
     names: list[str | None] = []
     for row, _ in use:
         domain: str | None = None
-        seq_num = int(row.seq_num)
         for reg in regions:
-            if reg.seq_start <= seq_num <= reg.seq_end:
+            if region_matches_residue(reg, row):
                 domain = reg.name
                 break
         names.append(domain)
@@ -1098,32 +1421,93 @@ def _contiguous_domain_stretches(
     return stretches
 
 
-def _per_domain_spearman_stats(
+def _per_domain_correlation_stats(
     db: np.ndarray,
     drel: np.ndarray,
     assignments: dict[str, list[int]],
     domain_order: Sequence[str],
+    *,
+    method: str = "spearman",
 ) -> list[tuple[str, float, int, str]]:
-    """Per-domain Spearman ρ(ΔB, Δrel): (name, rho, n, color)."""
-    from scipy.stats import spearmanr
+    """Per-domain correlation of ΔB vs Δrel: (name, rho, n, color)."""
+    from scipy import stats
 
-    stats: list[tuple[str, float, int, str]] = []
+    stats_out: list[tuple[str, float, int, str]] = []
     for name in domain_order:
         idx = assignments.get(name, [])
         color = DOMAIN_COLORS.get(name, UNASSIGNED_DOMAIN_COLOR)
         if len(idx) < 3:
-            stats.append((name, float("nan"), len(idx), color))
+            stats_out.append((name, float("nan"), len(idx), color))
             continue
         sub_db = np.asarray(db, dtype=np.float64)[idx]
         sub_drel = np.asarray(drel, dtype=np.float64)[idx]
         ok = np.isfinite(sub_db) & np.isfinite(sub_drel)
         n_ok = int(ok.sum())
         if n_ok < 3:
-            stats.append((name, float("nan"), n_ok, color))
+            stats_out.append((name, float("nan"), n_ok, color))
             continue
-        rho, _ = spearmanr(sub_db[ok], sub_drel[ok])
-        stats.append((name, float(rho) if np.isfinite(rho) else float("nan"), n_ok, color))
-    return stats
+        if method == "spearman":
+            r_val, _ = stats.spearmanr(sub_db[ok], sub_drel[ok])
+        else:
+            r_val, _ = stats.pearsonr(sub_db[ok], sub_drel[ok])
+        stats_out.append(
+            (name, float(r_val) if np.isfinite(r_val) else float("nan"), n_ok, color)
+        )
+    return stats_out
+
+
+def _domain_legend_patches(
+    assignments: dict[str, list[int]],
+    domain_order: Sequence[str],
+    *,
+    rho_by_name: dict[str, float] | None = None,
+) -> list:
+    """Color swatches for domain legend (panel b/c)."""
+    from matplotlib.patches import Patch
+
+    patches: list[Patch] = []
+    for name in domain_order:
+        if not assignments.get(name):
+            continue
+        label = name
+        if rho_by_name is not None:
+            rho = rho_by_name.get(name, float("nan"))
+            if np.isfinite(rho):
+                label = f"{name} (ρ={rho:+.2f})"
+        patches.append(
+            Patch(
+                facecolor=DOMAIN_COLORS.get(name, UNASSIGNED_DOMAIN_COLOR),
+                label=label,
+            )
+        )
+    return patches
+
+
+def _add_figure_domain_legend(
+    fig: plt.Figure,
+    ax: plt.Axes,
+    patches: Sequence[object],
+    *,
+    ncol_max: int = 6,
+    gap_below_ax: float = 0.045,
+) -> None:
+    """Horizontal domain legend in figure coords below ``ax`` (avoids chain-order clutter)."""
+    if not patches:
+        return
+    pos = ax.get_position()
+    ncol = min(len(patches), ncol_max)
+    fig.legend(
+        handles=patches,
+        loc="upper center",
+        bbox_to_anchor=(pos.x0 + 0.5 * pos.width, max(0.02, pos.y0 - gap_below_ax)),
+        bbox_transform=fig.transFigure,
+        ncol=ncol,
+        fontsize=6,
+        frameon=False,
+        handlelength=1.0,
+        columnspacing=0.9,
+        handletextpad=0.4,
+    )
 
 
 def _draw_conformation_delta_reliability_profile(
@@ -1174,22 +1558,6 @@ def _draw_conformation_delta_reliability_profile(
     y_lo, y_hi = -max_abs * 1.1, max_abs * 1.1
     ax.set_ylim(y_lo, y_hi)
 
-    if regions and domain_order:
-        for name in domain_order:
-            idx = [i for i, d in enumerate(domain_names) if d == name]
-            if not idx:
-                continue
-            mid_x = 0.5 * (min(idx) + max(idx))
-            ax.text(
-                mid_x,
-                y_lo * 0.92,
-                name,
-                ha="center",
-                va="bottom",
-                fontsize=6,
-                color=DOMAIN_COLORS.get(name, UNASSIGNED_DOMAIN_COLOR),
-            )
-
     ax.axhline(0.0, color="#999999", lw=0.5, zorder=1)
 
     ax2 = ax.twinx()
@@ -1202,7 +1570,7 @@ def _draw_conformation_delta_reliability_profile(
     x0, x1 = 0.0, float(max(n - 1, 0))
     x_pad = 0.01 * max(1.0, x1 - x0)
     ax.set_xlim(x0 - x_pad, x1 + x_pad)
-    ax.set_xlabel("Residue index (chain order)", fontsize=7)
+    ax.set_xlabel("Residue index (chain order)", fontsize=7, labelpad=6)
     ax.set_ylabel("Δreliability", fontsize=7)
     ax.set_title("Per-residue Δreliability · colored by domain", fontsize=7)
     if panel_letter is not None:
@@ -1252,6 +1620,7 @@ def _draw_conformation_summary_scatter_panel(
     emdb_a: str,
     emdb_b: str,
     spearman_rho: float | None,
+    spearman_rho_h: float | None = None,
     use_full: Sequence[tuple[object, object]] | None = None,
     regions: Sequence[object] | None = None,
     domain_order: Sequence[str] | None = None,
@@ -1264,70 +1633,46 @@ def _draw_conformation_summary_scatter_panel(
     ax.scatter(db_full, drel_full, s=8, alpha=0.6, c=point_colors, edgecolors="none")
     ax.axhline(0, color="#999999", lw=0.5)
     ax.axvline(0, color="#999999", lw=0.5)
-    x = np.asarray(db_full, dtype=np.float64)
-    y = np.asarray(drel_full, dtype=np.float64)
     domain_rho_map: dict[str, float] = {}
     if use_full and regions and domain_order:
         assignments = get_domain_assignments(use_full, regions)
         domain_rho_map = {
             name: rho
-            for name, rho, _n, _color in _per_domain_spearman_stats(
-                db_full, drel_full, assignments, domain_order
+            for name, rho, _n, _color in _per_domain_correlation_stats(
+                db_full, drel_full, assignments, domain_order, method="spearman"
             )
         }
-        for name in domain_order:
-            idx = assignments.get(name, [])
-            if len(idx) < 2:
-                continue
-            rho = domain_rho_map.get(name, float("nan"))
-            if not np.isfinite(rho) or rho > -0.2:
-                continue
-            sub_x = x[idx]
-            sub_y = y[idx]
-            ok = np.isfinite(sub_x) & np.isfinite(sub_y)
-            if ok.sum() < 2:
-                continue
-            coeffs = np.polyfit(sub_x[ok], sub_y[ok], 1)
-            xline = np.linspace(float(np.nanmin(sub_x[ok])), float(np.nanmax(sub_x[ok])), 100)
-            ls = "-" if rho <= -0.4 else "--"
-            ax.plot(
-                xline,
-                np.polyval(coeffs, xline),
-                ls,
-                color=DOMAIN_COLORS.get(name, UNASSIGNED_DOMAIN_COLOR),
-                lw=1.0,
-                alpha=0.85,
-                zorder=2,
-            )
     ax.set_xlabel(f"ΔB_iso ({emdb_b} − {emdb_a})", fontsize=7)
     ax.set_ylabel(f"Δreliability ({emdb_b} − {emdb_a})", fontsize=7)
     ax.set_title("ΔB vs Δreliability", fontsize=7)
-    rho_txt = "n/a"
-    if spearman_rho is not None and np.isfinite(spearman_rho):
-        rho_txt = f"{spearman_rho:.2f}"
+
+    def _rho_txt(rho: float | None) -> str:
+        if rho is not None and np.isfinite(rho):
+            return f"{rho:.2f}"
+        return "n/a"
+
     ax.text(
         0.03,
         0.97,
-        f"Spearman ρ = {rho_txt}\nn = {n_full}",
+        f"Spearman ρ(ΔB, Δrel) = {_rho_txt(spearman_rho)}\n"
+        f"Spearman ρ(ΔB, ΔH) = {_rho_txt(spearman_rho_h)}\n"
+        f"n = {n_full}",
         transform=ax.transAxes,
-        fontsize=7,
+        fontsize=6.5,
         va="top",
         ha="left",
+        linespacing=1.25,
     )
     if use_full and regions and domain_order:
-        from matplotlib.patches import Patch
-
         assignments = get_domain_assignments(use_full, regions)
-        legend_patches = [
-            Patch(facecolor=DOMAIN_COLORS.get(name, UNASSIGNED_DOMAIN_COLOR), label=name)
-            for name in domain_order
-            if assignments.get(name)
-        ]
+        legend_patches = _domain_legend_patches(
+            assignments, domain_order, rho_by_name=domain_rho_map
+        )
         if legend_patches:
             ax.legend(
                 handles=legend_patches,
-                loc="upper right",
-                fontsize=6,
+                loc="lower right",
+                fontsize=5.5,
                 frameon=False,
                 handlelength=1.0,
                 borderaxespad=0.3,
@@ -1427,7 +1772,7 @@ def plot_conformation_pair_summary_triptych(
     Returns ``(figure, recommended_layout)`` where ``recommended_layout`` is the
     legacy block/domain diagnostic from the cluster separation score (stats only).
     """
-    del spearman_rho_h, coords_b_aligned
+    del coords_b_aligned
     data = _conformation_pair_summary_data(
         pairs, in_mask_both=in_mask_both, half_window=half_window
     )
@@ -1486,7 +1831,7 @@ def plot_conformation_pair_summary_triptych(
         left=0.08,
         right=0.92,
         top=0.82,
-        bottom=0.10,
+        bottom=0.14,
     )
 
     im_cluster = None
@@ -1509,6 +1854,7 @@ def plot_conformation_pair_summary_triptych(
         emdb_a=emdb_a,
         emdb_b=emdb_b,
         spearman_rho=spearman_rho,
+        spearman_rho_h=spearman_rho_h,
         use_full=use_full,
         regions=regions or None,
         domain_order=domain_order or None,
@@ -1540,6 +1886,11 @@ def plot_conformation_pair_summary_triptych(
     ax_c.set_position([pos_a.x0, pos_c.y0, full_width, pos_c.height])
     label_panel(ax_c, "c", x=-0.1 * pos_a.width / full_width)
 
+    if regions and domain_order:
+        c_assignments = get_domain_assignments(use_full, regions)
+        c_legend = _domain_legend_patches(c_assignments, domain_order)
+        _add_figure_domain_legend(fig, ax_c, c_legend)
+
     if save_path:
         save_nature(fig, save_path, dpi=dpi)
     return fig, recommended_layout
@@ -1560,8 +1911,12 @@ __all__ = [
     "plot_spearman_top_bar",
     "CohortMetricRow",
     "collect_cohort_metrics",
+    "cohort_protein_size",
+    "infer_protein_class",
     "write_cohort_metrics_csv",
     "plot_cohort_metrics_heatmap",
+    "plot_cohort_size_vs_reliability",
+    "plot_cohort_reliability_by_class",
     "plot_conformation_pair_summary_triptych",
     "plot_conformation_pair_domain_coupling_supplement",
     "compute_conformation_coupling",
