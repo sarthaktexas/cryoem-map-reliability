@@ -22,7 +22,7 @@ from .pipeline import load_feature_maps, run_pipeline
 
 logger = logging.getLogger(__name__)
 
-LocalResolutionSource = Literal["local_fsc"]
+LocalResolutionSource = Literal["local_fsc", "blocres"]
 
 LocalResolutionGridReport = GridAlignmentReport
 
@@ -47,6 +47,20 @@ def _infer_local_fsc_from_path(path: Path) -> bool:
     return False
 
 
+def _infer_blocres_from_path(path: Path) -> bool:
+    """True if filename stem or MRC labels indicate a BlocRes local-resolution map."""
+    stem = path.stem.lower()
+    if "locres_blocres" in stem or stem.endswith("_blocres") or stem == "blocres":
+        return True
+    try:
+        for lab in _header_label_strings(path):
+            if "blocres" in lab:
+                return True
+    except OSError as e:
+        logger.debug("Could not read MRC labels for %s: %s", path, e)
+    return False
+
+
 def load_local_resolution_map(
     path: str | Path,
     *,
@@ -54,25 +68,36 @@ def load_local_resolution_map(
     dtype: type[np.float32] | type[np.float64] = np.float64,
 ) -> MapGrid:
     """
-    Load an Å-valued local-resolution volume produced by :mod:`cryoem_mrc.local_fsc`.
+    Load an Å-valued local-resolution volume (home-rolled FSC or BlocRes).
 
-    ``source`` must be ``"local_fsc"`` when set explicitly. When ``source`` is
-    None, the path must contain ``local_fsc`` / ``localfsc`` in the stem or MRC
-    labels (as written by :func:`local_fsc.save_local_fsc_resolution_mrc`).
+    ``source`` may be ``"local_fsc"`` or ``"blocres"`` when set explicitly. When
+    ``source`` is None, the path stem or MRC labels must identify the format.
     """
     path = Path(path)
-    if source is not None and source != "local_fsc":
+    if source == "local_fsc":
+        if not _infer_local_fsc_from_path(path):
+            raise ValueError(f"Could not identify {path.name} as a local_fsc map.")
+        resolved = "local_fsc"
+    elif source == "blocres":
+        if not _infer_blocres_from_path(path):
+            raise ValueError(f"Could not identify {path.name} as a BlocRes map.")
+        resolved = "blocres"
+    elif source is None:
+        if _infer_blocres_from_path(path):
+            resolved = "blocres"
+        elif _infer_local_fsc_from_path(path):
+            resolved = "local_fsc"
+        else:
+            raise ValueError(
+                f"Could not identify {path.name} as local_fsc or BlocRes. "
+                "Use a filename like 'locres_blocres.mrc' or '*_local_fsc_*.mrc'."
+            )
+    else:
         raise ValueError(
             f"Unsupported local-resolution source {source!r}; "
-            "only home-rolled local_fsc maps are supported."
+            "use 'local_fsc' or 'blocres'."
         )
-    if not _infer_local_fsc_from_path(path):
-        raise ValueError(
-            f"Could not identify {path.name} as a local_fsc map. "
-            "Use a filename containing 'local_fsc' (e.g. from scripts/run_local_fsc.py) "
-            "or ensure the MRC label includes 'local_fsc'."
-        )
-    logger.debug("load_local_resolution_map: source=local_fsc path=%s", path)
+    logger.debug("load_local_resolution_map: source=%s path=%s", resolved, path)
     return load_map_grid(path, dtype=dtype, normalize=None)
 
 
