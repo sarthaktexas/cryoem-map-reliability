@@ -18,7 +18,7 @@
     },
     {
       "id": "mgta",
-      "emdb_ids": ["49450", "48923", "48534", "48602"],
+      "emdb_ids": ["49450", "48923", "48534"],
       "pdb_refs": ["9nhz", "9n5j", "9mqm"],
       "comment": "L. lactis MgtA P-type ATPase (E. coli MgtA UniProt P0ABB8 topology; auth ≈ EC − 19, auth 22–910 on deposited models).",
       "regions": [

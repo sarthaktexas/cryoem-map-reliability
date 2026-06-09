@@ -1,43 +1,84 @@
 emdb_id,display_name,half1_path,half2_path,reference_mrc,contour,flexibility_source,flexibility_path_or_pdb,notes,expected_flexibility_rank,global_resolution_a
+
 49450,MgtA (E2P+E1),data/emd_49450-mgtA_e2p+e1/emd_49450_half_map_1.map,data/emd_49450-mgtA_e2p+e1/emd_49450_half_map_2.map,data/emd_49450-mgtA_e2p+e1/emd_49450.map,0.116,b_factor,pdb/9nhz.cif,maps+PDB local; LH+B-factor validated (anchor),rigid_core,2.73
+
 11638,Apoferritin,data/emd_11638-atomic_apoferritin/emd_11638_half_map_1.map,data/emd_11638-atomic_apoferritin/emd_11638_half_map_2.map,data/emd_11638-atomic_apoferritin/emd_11638.map,0.116,b_factor,pdb/7a4m.cif,maps+PDB local; LH+B-factor validated,rigid_core,1.22
+
 23129,TRPV1 pH 6a,data/emd_23129-trpv1_ph6a/emd_23129_half_map_1.map,data/emd_23129-trpv1_ph6a/emd_23129_half_map_2.map,data/emd_23129-trpv1_ph6a/emd_23129.map,0.009,b_factor,pdb/7l2i.cif,maps+PDB local; LH+B-factor validated; Zhang et al. pH6a substate,8,3.70
-23130,TRPV1 pH 6c,data/emd_23130-trpv1_ph6c/emd_23130_half_map_1.map,data/emd_23130-trpv1_ph6c/emd_23130_half_map_2.map,data/emd_23130-trpv1_ph6c/emd_23130.map,0.014,conformational_pair,pdb/7l2j.cif,maps+PDB local; paired vs 23129; Zhang et al. pH6c substate,8,3.66
-48923,MgtA (E2.Mg.BeF3),data/emd_48923-mgtA_e2+mg+bef3/emd_48923_half_map_1.map,data/emd_48923-mgtA_e2+mg+bef3/emd_48923_half_map_2.map,data/emd_48923-mgtA_e2+mg+bef3/emd_48923.map,0.11,conformational_pair,pdb/9n5j.cif,maps+PDB local; NEXT: run_analysis + lh_export + pair vs 49450,TBD,2.59
-48534,MgtA (E2P.Mg),data/emd_48534-mgtA_e2p+mg/emd_48534_half_map_1.map,data/emd_48534-mgtA_e2p+mg/emd_48534_half_map_2.map,data/emd_48534-mgtA_e2p+mg/emd_48534.map,0.111,conformational_pair,pdb/9mqm.cif,maps+PDB local; NEXT: run_analysis + lh_export + pair vs 49450/48923,TBD,3.07
+
+23130,TRPV1 pH 6c,data/emd_23130-trpv1_ph6c/emd_23130_half_map_1.map,data/emd_23130-trpv1_ph6c/emd_23130_half_map_2.map,data/emd_23130-trpv1_ph6c/emd_23130.map,0.014,conformational_pair,pdb/7l2j.cif,maps+PDB local; pair vs 23129; Zhang et al. pH6c substate,8,3.66
+
+48923,MgtA (E2.Mg.BeF3),data/emd_48923-mgtA_e2+mg+bef3/emd_48923_half_map_1.map,data/emd_48923-mgtA_e2+mg+bef3/emd_48923_half_map_2.map,data/emd_48923-mgtA_e2+mg+bef3/emd_48923.map,0.11,conformational_pair,pdb/9n5j.cif,maps+PDB local; pair vs 48534 (E2 vs E2P cycle),TBD,2.59
+
+48534,MgtA (E2P.Mg),data/emd_48534-mgtA_e2p+mg/emd_48534_half_map_1.map,data/emd_48534-mgtA_e2p+mg/emd_48534_half_map_2.map,data/emd_48534-mgtA_e2p+mg/emd_48534.map,0.111,conformational_pair,pdb/9mqm.cif,maps+PDB local; pair vs 48923 (E2P vs E2 cycle),TBD,3.07
+
 5995,Beta-galactosidase (excluded - no half-maps),data/emd_5995/emd_5995_half_map_1.map,data/emd_5995/emd_5995_half_map_2.map,data/emd_5995/emd_5995.map,0.0224,excluded,pdb/3j7h.cif,SKIP: no half maps; use 16091 for beta-gal,5,3.20
-16091,Beta-galactosidase (5ms time-resolved),data/emd_16091-betagal_5ms_trjem/emd_16091_half_map_1.map,data/emd_16091-betagal_5ms_trjem/emd_16091_half_map_2.map,data/emd_16091-betagal_5ms_trjem/emd_16091.map,0.035,b_factor,pdb/8bk7.cif,maps local; NEED pdb/8bk7.cif; NEXT: run_analysis + lh_export + bfactor,5,3.30
-41756,LRRK2 CTD (+GZD824),data/emd_41756-lrrk2_ctd_gzd824/emd_41756_half_map_1.map,data/emd_41756-lrrk2_ctd_gzd824/emd_41756_half_map_2.map,data/emd_41756-lrrk2_ctd_gzd824/emd_41756.map,0.197,b_factor,pdb/8tze.cif,maps local; NEED pdb/8tze.cif; NEXT: run_analysis + lh_export + bfactor,7,2.90
-45261,70S Ribosome,data/emd_45261-70s_ribosome/emd_45261_half_map_1.map,data/emd_45261-70s_ribosome/emd_45261_half_map_2.map,data/emd_45261-70s_ribosome/emd_45261.map,2.7,literature_segment,,maps local; no PDB; lh_export only; defer on 8GB RAM,TBD,5.00
-61596,HSV-2 gB (+Fab16F9),data/emd_61596-hsv2_gB_fab16f9/emd_61596_half_map_1.map,data/emd_61596-hsv2_gB_fab16f9/emd_61596_half_map_2.map,data/emd_61596-hsv2_gB_fab16f9/emd_61596.map,0.08,b_factor,pdb/9jmb.cif,maps local; NEED pdb/9jmb.cif; NEXT: run_analysis + lh_export + bfactor,6,2.18
-52525,Complex III (mitochondrial),data/emd_52525-complexIII_mito/emd_52525_half_map_1.map,data/emd_52525-complexIII_mito/emd_52525_half_map_2.map,data/emd_52525-complexIII_mito/emd_52525.map,4.54,b_factor,pdb/9hzl.cif,maps local; NEED pdb/9hzl.cif; NEXT: run_analysis + lh_export + bfactor,6,2.52
-52515,UBR4-KCMF1 (N-terminal),data/emd_52515-ubr4_kcmf1_nterm/emd_52515_half_map_1.map,data/emd_52515-ubr4_kcmf1_nterm/emd_52515_half_map_2.map,data/emd_52515-ubr4_kcmf1_nterm/emd_52515.map,0.0045,halfmap_cc_only,,maps local; no PDB; lh_export only (CC at low res),TBD,5.70
-48602,MgtA (E2),data/emdb_48602-mgtA_e2/emd_48602_half_map_1.map,data/emdb_48602-mgtA_e2/emd_48602_half_map_2.map,data/emdb_48602-mgtA_e2/emd_48602.map,TBD,optional,pdb/9mt7.cif,OPTIONAL: fourth MgtA; maps+PDB local; redundant with 48923; confirm contour on EMDB,TBD,3.23
+
+16091,Beta-galactosidase (5ms time-resolved),data/emd_16091-betagal_5ms_trjem/emd_16091_half_map_1.map,data/emd_16091-betagal_5ms_trjem/emd_16091_half_map_2.map,data/emd_16091-betagal_5ms_trjem/emd_16091.map,0.035,b_factor,pdb/8bk7.cif,maps+PDB local; LH+B-factor validated,5,3.30
+
+41756,LRRK2 CTD (+GZD824),data/emd_41756-lrrk2_ctd_gzd824/emd_41756_half_map_1.map,data/emd_41756-lrrk2_ctd_gzd824/emd_41756_half_map_2.map,data/emd_41756-lrrk2_ctd_gzd824/emd_41756.map,0.197,b_factor,pdb/8tze.cif,maps+PDB local; LH+B-factor validated,7,2.90
+
+45261,70S Ribosome,data/emd_45261-70s_ribosome/emd_45261_half_map_1.map,data/emd_45261-70s_ribosome/emd_45261_half_map_2.map,data/emd_45261-70s_ribosome/emd_45261.map,2.7,literature_segment,,maps local; no PDB; CC-only validation,TBD,5.00
+
+61596,HSV-2 gB (+Fab16F9),data/emd_61596-hsv2_gB_fab16f9/emd_61596_half_map_1.map,data/emd_61596-hsv2_gB_fab16f9/emd_61596_half_map_2.map,data/emd_61596-hsv2_gB_fab16f9/emd_61596.map,0.08,b_factor,pdb/9jmb.cif,maps+PDB local; LH+B-factor validated,6,2.18
+
+52525,Complex III (mitochondrial),data/emd_52525-complexIII_mito/emd_52525_half_map_1.map,data/emd_52525-complexIII_mito/emd_52525_half_map_2.map,data/emd_52525-complexIII_mito/emd_52525.map,4.54,b_factor,pdb/9hzl.cif,maps+PDB local; LH+B-factor validated,6,2.52
+
+52515,UBR4-KCMF1 (N-terminal),data/emd_52515-ubr4_kcmf1_nterm/emd_52515_half_map_1.map,data/emd_52515-ubr4_kcmf1_nterm/emd_52515_half_map_2.map,data/emd_52515-ubr4_kcmf1_nterm/emd_52515.map,0.0045,halfmap_cc_only,,maps local; no PDB; CC-only validation (low res),TBD,5.70
+
 30207,Beta-galactosidase+PEG v1 (excluded),data/emd_30207/emd_30207_half_map_1.map,data/emd_30207/emd_30207_half_map_2.map,data/emd_30207/emd_30207.map,TBD,excluded,,SKIP: beta-gal PEGylation; no half maps on EMDB,TBD,3.10
+
 30208,Beta-galactosidase+PEG v2 (excluded),data/emd_30208/emd_30208_half_map_1.map,data/emd_30208/emd_30208_half_map_2.map,data/emd_30208/emd_30208.map,TBD,excluded,,SKIP: beta-gal PEGylation; no half maps on EMDB,TBD,3.20
-24120,70S pre-translocation (E. coli),data/emd_24120-70s_pre_translocation/emd_24120_half_map_1.map,data/emd_24120-70s_pre_translocation/emd_24120_half_map_2.map,data/emd_24120-70s_pre_translocation/emd_24120.map,0.02,conformational_pair,pdb/7n1p.cif,expansion pair vs 25418; NEXT: download + pipeline,TBD,2.33
-25418,70S post-translocation (E. coli),data/emd_25418-70s_post_translocation/emd_25418_half_map_1.map,data/emd_25418-70s_post_translocation/emd_25418_half_map_2.map,data/emd_25418-70s_post_translocation/emd_25418.map,1.35,conformational_pair,pdb/7st2.cif,expansion pair vs 24120; NEXT: download + pipeline,TBD,2.90
-41596,MsbA outward-facing,data/emd_41596-msba_outward/emd_41596_half_map_1.map,data/emd_41596-msba_outward/emd_41596_half_map_2.map,data/emd_41596-msba_outward/emd_41596.map,1.4,conformational_pair,pdb/8tso.cif,expansion pair vs 41598; NEXT: download + pipeline,TBD,2.68
-41598,MsbA inward-facing,data/emd_41598-msba_inward/emd_41598_half_map_1.map,data/emd_41598-msba_inward/emd_41598_half_map_2.map,data/emd_41598-msba_inward/emd_41598.map,0.4,conformational_pair,pdb/8tsq.cif,expansion pair vs 41596; NEXT: download + pipeline,TBD,3.60
-45604,beta2AR inactive (carazolol),data/emd_45604-beta2ar_inactive/emd_45604_half_map_1.map,data/emd_45604-beta2ar_inactive/emd_45604_half_map_2.map,data/emd_45604-beta2ar_inactive/emd_45604.map,0.3,conformational_pair,pdb/9chx.cif,expansion pair vs 45603; NEXT: download + pipeline,TBD,3.50
-45603,beta2AR apo,data/emd_45603-beta2ar_apo/emd_45603_half_map_1.map,data/emd_45603-beta2ar_apo/emd_45603_half_map_2.map,data/emd_45603-beta2ar_apo/emd_45603.map,0.3,conformational_pair,pdb/9chv.cif,expansion pair vs 45604; NEXT: download + pipeline,TBD,3.95
-28498,Eag1 voltage sensor down,data/emd_28498-eag1_vs_down/emd_28498_half_map_1.map,data/emd_28498-eag1_vs_down/emd_28498_half_map_2.map,data/emd_28498-eag1_vs_down/emd_28498.map,0.07,conformational_pair,pdb/8ep1.cif,expansion pair vs 28487; NEXT: download + pipeline,TBD,5.40
-28487,Eag1 voltage sensor up,data/emd_28487-eag1_vs_up/emd_28487_half_map_1.map,data/emd_28487-eag1_vs_up/emd_28487_half_map_2.map,data/emd_28487-eag1_vs_up/emd_28487.map,0.1,conformational_pair,pdb/8eow.cif,expansion pair vs 28498; NEXT: download + pipeline,TBD,3.90
-13308,GroEL-GroES ADP (tight),data/emd_13308-groel_groes_adp/emd_13308_half_map_1.map,data/emd_13308-groel_groes_adp/emd_13308_half_map_2.map,data/emd_13308-groel_groes_adp/emd_13308.map,1.5,conformational_pair,pdb/7pbx.cif,expansion pair vs 16119; NEXT: download + pipeline,TBD,3.43
-16119,GroEL-GroES ADP (turnover),data/emd_16119-groel_groes_adp/emd_16119_half_map_1.map,data/emd_16119-groel_groes_adp/emd_16119_half_map_2.map,data/emd_16119-groel_groes_adp/emd_16119.map,0.025,conformational_pair,pdb/8bmo.cif,expansion pair vs 13308; NEXT: download + pipeline,TBD,3.40
-11497,SARS-CoV-2 spike 3 RBD-down,data/emd_11497-spike_3rbd_down/emd_11497_half_map_1.map,data/emd_11497-spike_3rbd_down/emd_11497_half_map_2.map,data/emd_11497-spike_3rbd_down/emd_11497.map,0.0261,conformational_pair,pdb/6zwv.cif,expansion pair vs 11494; NEXT: download + pipeline,TBD,3.50
-11494,SARS-CoV-2 spike prefusion STA,data/emd_11494-spike_prefusion_sta/emd_11494_half_map_1.map,data/emd_11494-spike_prefusion_sta/emd_11494_half_map_2.map,data/emd_11494-spike_prefusion_sta/emd_11494.map,4.2,conformational_pair,,expansion pair vs 11497; no PDB on EMDB; CC-only; NEXT: download + lh_export,TBD,8.60
-4940,ClpB WT-1 (ATPgammaS),data/emd_4940-clpb_wt1/emd_4940_half_map_1.map,data/emd_4940-clpb_wt1/emd_4940_half_map_2.map,data/emd_4940-clpb_wt1/emd_4940.map,0.01,conformational_pair,pdb/6rn2.cif,expansion pair vs 4941; NEXT: download + pipeline,TBD,6.20
-4941,ClpB WT-2A (ATPgammaS),data/emd_4941-clpb_wt2a/emd_4941_half_map_1.map,data/emd_4941-clpb_wt2a/emd_4941_half_map_2.map,data/emd_4941-clpb_wt2a/emd_4941.map,0.05,conformational_pair,pdb/6rn3.cif,expansion pair vs 4940; NEXT: download + pipeline,TBD,4.00
-37504,GLP-1R + Gs (ligand-free),data/emd_37504-glp1r_gs/emd_37504_half_map_1.map,data/emd_37504-glp1r_gs/emd_37504_half_map_2.map,data/emd_37504-glp1r_gs/emd_37504.map,0.023,b_factor,pdb/8wg7.cif,publication cohort; NEXT: download + pipeline,TBD,2.54
-9156,NMDA GluN1-GluN2A Extended-1,data/emd_9156-nmda_extended1/emd_9156_half_map_1.map,data/emd_9156-nmda_extended1/emd_9156_half_map_2.map,data/emd_9156-nmda_extended1/emd_9156.map,4.5,b_factor,pdb/6mmm.cif,publication cohort; NEXT: download + pipeline,TBD,6.84
-48311,Yeast V-ATPase Vo,data/emd_48311-yeast_vatpase_vo/emd_48311_half_map_1.map,data/emd_48311-yeast_vatpase_vo/emd_48311_half_map_2.map,data/emd_48311-yeast_vatpase_vo/emd_48311.map,0.005,b_factor,pdb/9mj4.cif,publication cohort; NEXT: download + pipeline,TBD,3.70
-11149,Bovine ATP synthase Fo,data/emd_11149-bovine_atp_synthase_fo/emd_11149_half_map_1.map,data/emd_11149-bovine_atp_synthase_fo/emd_11149_half_map_2.map,data/emd_11149-bovine_atp_synthase_fo/emd_11149.map,0.0197,b_factor,pdb/5ara.cif,publication cohort; NEXT: download + pipeline,TBD,3.61
-42603,Human p97/VCP + inhibitor,data/emd_42603-p97_vcp/emd_42603_half_map_1.map,data/emd_42603-p97_vcp/emd_42603_half_map_2.map,data/emd_42603-p97_vcp/emd_42603.map,0.33,b_factor,pdb/8uv2.cif,publication cohort; NEXT: download + pipeline,TBD,3.23
-6287,T20S proteasome,data/emd_6287-proteasome_t20s/emd_6287_half_map_1.map,data/emd_6287-proteasome_t20s/emd_6287_half_map_2.map,data/emd_6287-proteasome_t20s/emd_6287.map,0.025,halfmap_cc_only,,publication cohort; no PDB on EMDB; NEXT: download + lh_export,TBD,2.80
-44471,Human nucleosome 3.0 A,data/emd_44471-nucleosome_3A/emd_44471_half_map_1.map,data/emd_44471-nucleosome_3A/emd_44471_half_map_2.map,data/emd_44471-nucleosome_3A/emd_44471.map,0.855,b_factor,pdb/9be6.cif,publication cohort; NEXT: download + pipeline,TBD,3.00
-33736,Tetrahymena ribozyme,data/emd_33736-tetrahymena_ribozyme/emd_33736_half_map_1.map,data/emd_33736-tetrahymena_ribozyme/emd_33736_half_map_2.map,data/emd_33736-tetrahymena_ribozyme/emd_33736.map,0.1,b_factor,pdb/7yc8.cif,publication cohort; NEXT: download + pipeline,TBD,4.14
-33734,SARS-CoV-2 spike K202B bispecific,data/emd_33734-spike_k202b/emd_33734_half_map_1.map,data/emd_33734-spike_k202b/emd_33734_half_map_2.map,data/emd_33734-spike_k202b/emd_33734.map,0.55,b_factor,pdb/7yc5.cif,publication cohort; NEXT: download + pipeline,TBD,3.10
-62841,Thermophile spliceosome ILS,data/emd_62841-spliceosome_ils/emd_62841_half_map_1.map,data/emd_62841-spliceosome_ils/emd_62841_half_map_2.map,data/emd_62841-spliceosome_ils/emd_62841.map,0.005,b_factor,pdb/9l5r.cif,publication cohort; NEXT: download + pipeline,TBD,2.80
-45266,70S ribosome (EMPIAR-10499),data/emd_45266-70s_ribosome_empiar/emd_45266_half_map_1.map,data/emd_45266-70s_ribosome_empiar/emd_45266_half_map_2.map,data/emd_45266-70s_ribosome_empiar/emd_45266.map,0.4,halfmap_cc_only,,publication cohort; no PDB; complements 45261; NEXT: download + lh_export,TBD,5.40
-7130,Epithelial Na+ channel (ENaC),data/emd_7130-enac/emd_7130_half_map_1.map,data/emd_7130-enac/emd_7130_half_map_2.map,data/emd_7130-enac/emd_7130.map,2.8,b_factor,pdb/6bqn.cif,publication cohort; NEXT: download + pipeline,TBD,3.90
+
+24120,70S pre-translocation (E. coli),data/emd_24120-70s_pre_translocation/emd_24120_half_map_1.map,data/emd_24120-70s_pre_translocation/emd_24120_half_map_2.map,data/emd_24120-70s_pre_translocation/emd_24120.map,0.02,conformational_pair,pdb/7n1p.cif,maps+PDB local; pair vs 25418,TBD,2.33
+
+25418,70S post-translocation (E. coli),data/emd_25418-70s_post_translocation/emd_25418_half_map_1.map,data/emd_25418-70s_post_translocation/emd_25418_half_map_2.map,data/emd_25418-70s_post_translocation/emd_25418.map,1.35,conformational_pair,pdb/7st2.cif,maps+PDB local; pair vs 24120,TBD,2.90
+
+41596,MsbA outward-facing,data/emd_41596-msba_outward/emd_41596_half_map_1.map,data/emd_41596-msba_outward/emd_41596_half_map_2.map,data/emd_41596-msba_outward/emd_41596.map,1.4,conformational_pair,pdb/8tso.cif,maps+PDB local; pair vs 41598,TBD,2.68
+
+41598,MsbA inward-facing,data/emd_41598-msba_inward/emd_41598_half_map_1.map,data/emd_41598-msba_inward/emd_41598_half_map_2.map,data/emd_41598-msba_inward/emd_41598.map,0.4,conformational_pair,pdb/8tsq.cif,maps+PDB local; pair vs 41596,TBD,3.60
+
+45604,beta2AR inactive (carazolol),data/emd_45604-beta2ar_inactive/emd_45604_half_map_1.map,data/emd_45604-beta2ar_inactive/emd_45604_half_map_2.map,data/emd_45604-beta2ar_inactive/emd_45604.map,0.3,conformational_pair,pdb/9chx.cif,maps+PDB local; pair vs 45603,TBD,3.50
+
+45603,beta2AR apo,data/emd_45603-beta2ar_apo/emd_45603_half_map_1.map,data/emd_45603-beta2ar_apo/emd_45603_half_map_2.map,data/emd_45603-beta2ar_apo/emd_45603.map,0.3,conformational_pair,pdb/9chv.cif,maps+PDB local; pair vs 45604,TBD,3.95
+
+28498,Eag1 voltage sensor down,data/emd_28498-eag1_vs_down/emd_28498_half_map_1.map,data/emd_28498-eag1_vs_down/emd_28498_half_map_2.map,data/emd_28498-eag1_vs_down/emd_28498.map,0.07,conformational_pair,pdb/8ep1.cif,maps+PDB local; pair vs 28487,TBD,5.40
+
+28487,Eag1 voltage sensor up,data/emd_28487-eag1_vs_up/emd_28487_half_map_1.map,data/emd_28487-eag1_vs_up/emd_28487_half_map_2.map,data/emd_28487-eag1_vs_up/emd_28487.map,0.1,conformational_pair,pdb/8eow.cif,maps+PDB local; pair vs 28498,TBD,3.90
+
+13308,GroEL-GroES ADP (tight),data/emd_13308-groel_groes_adp/emd_13308_half_map_1.map,data/emd_13308-groel_groes_adp/emd_13308_half_map_2.map,data/emd_13308-groel_groes_adp/emd_13308.map,1.5,conformational_pair,pdb/7pbx.cif,maps+PDB local; pair vs 16119,TBD,3.43
+
+16119,GroEL-GroES ADP (turnover),data/emd_16119-groel_groes_adp/emd_16119_half_map_1.map,data/emd_16119-groel_groes_adp/emd_16119_half_map_2.map,data/emd_16119-groel_groes_adp/emd_16119.map,0.025,conformational_pair,pdb/8bmo.cif,maps+PDB local; pair vs 13308,TBD,3.40
+
+11497,SARS-CoV-2 spike 3 RBD-down,data/emd_11497-spike_3rbd_down/emd_11497_half_map_1.map,data/emd_11497-spike_3rbd_down/emd_11497_half_map_2.map,data/emd_11497-spike_3rbd_down/emd_11497.map,0.0261,conformational_pair,pdb/6zwv.cif,maps+PDB local; pair vs 11494,TBD,3.50
+
+11494,SARS-CoV-2 spike prefusion STA,data/emd_11494-spike_prefusion_sta/emd_11494_half_map_1.map,data/emd_11494-spike_prefusion_sta/emd_11494_half_map_2.map,data/emd_11494-spike_prefusion_sta/emd_11494.map,4.2,conformational_pair,,pair vs 11497; no PDB on EMDB; CC-only,TBD,8.60
+
+4940,ClpB WT-1 (ATPgammaS),data/emd_4940-clpb_wt1/emd_4940_half_map_1.map,data/emd_4940-clpb_wt1/emd_4940_half_map_2.map,data/emd_4940-clpb_wt1/emd_4940.map,0.01,conformational_pair,pdb/6rn2.cif,maps+PDB local; pair vs 4941,TBD,6.20
+
+4941,ClpB WT-2A (ATPgammaS),data/emd_4941-clpb_wt2a/emd_4941_half_map_1.map,data/emd_4941-clpb_wt2a/emd_4941_half_map_2.map,data/emd_4941-clpb_wt2a/emd_4941.map,0.05,conformational_pair,pdb/6rn3.cif,maps+PDB local; pair vs 4940,TBD,4.00
+
+37504,GLP-1R + Gs (ligand-free),data/emd_37504-glp1r_gs/emd_37504_half_map_1.map,data/emd_37504-glp1r_gs/emd_37504_half_map_2.map,data/emd_37504-glp1r_gs/emd_37504.map,0.023,b_factor,pdb/8wg7.cif,maps+PDB local; LH+B-factor validated,TBD,2.54
+
+9156,NMDA GluN1-GluN2A Extended-1,data/emd_9156-nmda_extended1/emd_9156_half_map_1.map,data/emd_9156-nmda_extended1/emd_9156_half_map_2.map,data/emd_9156-nmda_extended1/emd_9156.map,4.5,b_factor,pdb/6mmm.cif,maps+PDB local; LH+B-factor validated; weak rho(B rel),TBD,6.84
+
+48311,Yeast V-ATPase Vo,data/emd_48311-yeast_vatpase_vo/emd_48311_half_map_1.map,data/emd_48311-yeast_vatpase_vo/emd_48311_half_map_2.map,data/emd_48311-yeast_vatpase_vo/emd_48311.map,0.005,b_factor,pdb/9mj4.cif,maps+PDB local; LH+B-factor validated,TBD,3.70
+
+11149,Bovine ATP synthase Fo,data/emd_11149-bovine_atp_synthase_fo/emd_11149_half_map_1.map,data/emd_11149-bovine_atp_synthase_fo/emd_11149_half_map_2.map,data/emd_11149-bovine_atp_synthase_fo/emd_11149.map,0.0197,b_factor,pdb/5ara.cif,maps+PDB local; LH+B-factor validated,TBD,3.61
+
+42603,Human p97/VCP + inhibitor,data/emd_42603-p97_vcp/emd_42603_half_map_1.map,data/emd_42603-p97_vcp/emd_42603_half_map_2.map,data/emd_42603-p97_vcp/emd_42603.map,0.33,b_factor,pdb/8uv2.cif,maps+PDB local; LH+B-factor validated,TBD,3.23
+
+6287,T20S proteasome,data/emd_6287-proteasome_t20s/emd_6287_half_map_1.map,data/emd_6287-proteasome_t20s/emd_6287_half_map_2.map,data/emd_6287-proteasome_t20s/emd_6287.map,0.025,halfmap_cc_only,,maps local; no PDB on EMDB; CC-only,TBD,2.80
+
+44471,Human nucleosome 3.0 A,data/emd_44471-nucleosome_3A/emd_44471_half_map_1.map,data/emd_44471-nucleosome_3A/emd_44471_half_map_2.map,data/emd_44471-nucleosome_3A/emd_44471.map,0.855,b_factor,pdb/9be6.cif,maps+PDB local; LH+B-factor validated,TBD,3.00
+
+33736,Tetrahymena ribozyme,data/emd_33736-tetrahymena_ribozyme/emd_33736_half_map_1.map,data/emd_33736-tetrahymena_ribozyme/emd_33736_half_map_2.map,data/emd_33736-tetrahymena_ribozyme/emd_33736.map,0.1,excluded,pdb/7yc8.cif,RNA-only model (7yc8: 389 nucleotides / 0 Cα); incompatible with Cα-based residue analysis,TBD,4.14
+
+33734,SARS-CoV-2 spike K202B bispecific,data/emd_33734-spike_k202b/emd_33734_half_map_1.map,data/emd_33734-spike_k202b/emd_33734_half_map_2.map,data/emd_33734-spike_k202b/emd_33734.map,0.55,b_factor,pdb/7yc5.cif,maps+PDB local; LH+B-factor validated; inverted rho(B rel),TBD,3.10
+
+62841,Thermophile spliceosome ILS,data/emd_62841-spliceosome_ils/emd_62841_half_map_1.map,data/emd_62841-spliceosome_ils/emd_62841_half_map_2.map,data/emd_62841-spliceosome_ils/emd_62841.map,0.005,b_factor,pdb/9l5r.cif,maps+PDB local; LH+B-factor validated,TBD,2.80
+
+45266,70S ribosome (EMPIAR-10499),data/emd_45266-70s_ribosome_empiar/emd_45266_half_map_1.map,data/emd_45266-70s_ribosome_empiar/emd_45266_half_map_2.map,data/emd_45266-70s_ribosome_empiar/emd_45266.map,0.4,halfmap_cc_only,,maps local; no PDB; complements 45261; CC-only,TBD,5.40
+
+7130,Epithelial Na+ channel (ENaC),data/emd_7130-enac/emd_7130_half_map_1.map,data/emd_7130-enac/emd_7130_half_map_2.map,data/emd_7130-enac/emd_7130.map,2.8,b_factor,pdb/6bqn.cif,maps+PDB local; LH+B-factor validated,TBD,3.90
+

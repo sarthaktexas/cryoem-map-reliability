@@ -3,18 +3,38 @@
   "updated": "2026-06-07",
   "notes": "Verified against files.wwpdb.org half-map FTP (206/200). Original COHORT.md IDs 0488/0489, 7523/7524, 3061/3062, 8118/8120, 9564/9565, 20205/20206 are wrong or lack half-maps; corrected pairs below replace them.",
   "legacy_invalid": [
-    {"pair": "2660 vs 2661", "reason": "Plasmodium 80S ribosome + emetine states, not E. coli 70S pre/post. Replaced by 24120 vs 25418."},
-    {"pair": "0488 vs 0489", "reason": "EMDB IDs not found on EMDB API."},
-    {"pair": "7523 vs 7524", "reason": "7523 is tau microtubule; 7524 suppressed. Replaced by 45604 vs 45603 (beta2AR)."},
-    {"pair": "3061 vs 3062", "reason": "3061 is gamma-secretase; 3062 is Slo2.2 channel. Replaced by 13308 vs 16119 (GroEL-GroES)."},
-    {"pair": "8118 vs 8120", "reason": "Both are TRPV1 (redundant with 23129/23130). Replaced by 28498 vs 28487 (Eag1 Kv)."},
-    {"pair": "9564 vs 9565", "reason": "Norovirus polymerase / VP1, not SARS-CoV-2 spike. Replaced by 11494 vs 11497."},
-    {"pair": "20205 vs 20206", "reason": "Norovirus structures, not ClpB. Replaced by 4940 vs 4941."}
+    {
+      "pair": "2660 vs 2661",
+      "reason": "Plasmodium 80S ribosome + emetine states, not E. coli 70S pre/post. Replaced by 24120 vs 25418."
+    },
+    {
+      "pair": "0488 vs 0489",
+      "reason": "EMDB IDs not found on EMDB API."
+    },
+    {
+      "pair": "7523 vs 7524",
+      "reason": "7523 is tau microtubule; 7524 suppressed. Replaced by 45604 vs 45603 (beta2AR)."
+    },
+    {
+      "pair": "3061 vs 3062",
+      "reason": "3061 is gamma-secretase; 3062 is Slo2.2 channel. Replaced by 13308 vs 16119 (GroEL-GroES)."
+    },
+    {
+      "pair": "8118 vs 8120",
+      "reason": "Both are TRPV1 (redundant with 23129/23130). Replaced by 28498 vs 28487 (Eag1 Kv)."
+    },
+    {
+      "pair": "9564 vs 9565",
+      "reason": "Norovirus polymerase / VP1, not SARS-CoV-2 spike. Replaced by 11494 vs 11497."
+    },
+    {
+      "pair": "20205 vs 20206",
+      "reason": "Norovirus structures, not ClpB. Replaced by 4940 vs 4941."
+    }
   ],
   "pairs": [
     {
       "id": "ribosome_ecoli_pre_post",
-      "tier": 1,
       "replaces": "2660 vs 2661",
       "description": "E. coli 70S pre- vs post-translocation",
       "states": [
@@ -38,7 +58,6 @@
     },
     {
       "id": "msba_outward_inward",
-      "tier": 1,
       "replaces": "0488 vs 0489",
       "description": "MsbA outward- vs inward-facing (Yang/Zhao 2024)",
       "states": [
@@ -62,7 +81,6 @@
     },
     {
       "id": "beta2ar_inactive_apo",
-      "tier": 1,
       "replaces": "7523 vs 7524",
       "description": "beta2 adrenergic receptor inactive (carazolol) vs apo",
       "states": [
@@ -86,7 +104,6 @@
     },
     {
       "id": "eag1_vs_down_up",
-      "tier": 2,
       "replaces": "8118 vs 8120",
       "description": "Eag1 Kv voltage sensor down vs up (MacKinnon 2022)",
       "states": [
@@ -110,7 +127,6 @@
     },
     {
       "id": "groel_groes_adp_states",
-      "tier": 2,
       "replaces": "3061 vs 3062",
       "description": "GroEL-GroES ADP-bound states (two modern depositions; not classic open/apo GroEL)",
       "states": [
@@ -134,7 +150,6 @@
     },
     {
       "id": "spike_closed_vs_subtomogram",
-      "tier": 2,
       "replaces": "9564 vs 9565",
       "description": "SARS-CoV-2 spike: 3 RBD-down (SPA) vs prefusion subtomogram average (~8.6 A)",
       "states": [
@@ -159,7 +174,6 @@
     },
     {
       "id": "clpb_atp_states",
-      "tier": 3,
       "replaces": "20205 vs 20206",
       "description": "ClpB disaggregase ATPgammaS states WT-1 vs WT-2A (same paper, ~3.8 A)",
       "states": [

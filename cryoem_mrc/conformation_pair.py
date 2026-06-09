@@ -15,10 +15,8 @@ from .structure_validation import ResidueValidationRow
 COVERAGE_FLAG_THRESHOLD_PCT = 20.0
 _COHORT_DIR = Path(__file__).resolve().parent.parent / "cohort"
 CONFORMATION_PAIR_DOMAINS_PATH = _COHORT_DIR / "conformation_pair_domains.json"
-TRPV1_DOMAIN_REGIONS_PATH = _COHORT_DIR / "trpv1_domain_regions.json"
-MGTA_DOMAIN_REGIONS_PATH = _COHORT_DIR / "mgta_domain_regions.json"
 TRPV1_EMDB_IDS = frozenset({"23129", "23130"})
-MGTA_EMDB_IDS = frozenset({"49450", "48534", "48923", "48602"})
+MGTA_EMDB_IDS = frozenset({"49450", "48534", "48923"})
 _DOMAINS_REGISTRY_CACHE: list[dict] | None = None
 
 
@@ -180,18 +178,21 @@ def region_matches_residue(reg: DomainRegion, row: ResidueValidationRow) -> bool
     return reg.seq_start <= seq_num <= reg.seq_end
 
 
+def _domain_regions_for_registry_id(entry_id: str) -> list[DomainRegion]:
+    for entry in _load_domains_registry():
+        if str(entry.get("id", "")).strip() == entry_id:
+            return [_parse_domain_region(r) for r in entry.get("regions", [])]
+    return []
+
+
 def load_trpv1_domain_regions() -> list[DomainRegion]:
     """Rat TRPV1 domain bands for EMD-23129/23130 (PDB 7L2I/7L2J auth numbering)."""
-    return load_domain_regions_from_json(TRPV1_DOMAIN_REGIONS_PATH)
+    return _domain_regions_for_registry_id("trpv1")
 
 
 def load_mgta_domain_regions() -> list[DomainRegion]:
     """L. lactis MgtA domain bands for EMD-49450/48923/48534 (PDB 9NHZ/9N5J/9MQM)."""
-    return load_domain_regions_from_json(MGTA_DOMAIN_REGIONS_PATH)
-
-
-def _all_domain_region_paths() -> list[Path]:
-    return sorted(_COHORT_DIR.glob("*_domain_regions.json"))
+    return _domain_regions_for_registry_id("mgta")
 
 
 def domain_colors_from_regions(regions: Sequence[DomainRegion]) -> dict[str, str]:
@@ -204,9 +205,6 @@ def _merged_domain_colors() -> dict[str, str]:
     for entry in _load_domains_registry():
         for raw in entry.get("regions", []):
             colors[str(raw["name"])] = str(raw["color"])
-    if not colors:
-        for path in _all_domain_region_paths():
-            colors.update(domain_colors_from_regions(load_domain_regions_from_json(path)))
     return colors
 
 

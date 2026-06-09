@@ -137,32 +137,28 @@ def _load_manifest(path: Path) -> dict:
         return json.load(f)
 
 
-def _select_pairs(data: dict, *, pair_id: str | None, tier: int | None, all_pairs: bool) -> list[dict]:
+def _select_pairs(data: dict, *, pair_id: str | None, all_pairs: bool) -> list[dict]:
     pairs = data.get("pairs", [])
     if pair_id:
         out = [p for p in pairs if p.get("id") == pair_id]
         if not out:
             raise SystemExit(f"Unknown pair id: {pair_id!r}. Choices: {[p['id'] for p in pairs]}")
         return out
-    if tier is not None:
-        return [p for p in pairs if int(p.get("tier", 0)) == tier]
     if all_pairs:
         return pairs
-    raise SystemExit("Specify --all, --tier N, or --pair <id>")
+    raise SystemExit("Specify --all or --pair <id>")
 
 
-def _select_publication(data: dict, *, emdb_id: str | None, priority: int | None, all_entries: bool) -> list[dict]:
+def _select_publication(data: dict, *, emdb_id: str | None, all_entries: bool) -> list[dict]:
     entries = data.get("entries", [])
     if emdb_id:
         out = [e for e in entries if str(e["emdb_id"]) == emdb_id.strip()]
         if not out:
             raise SystemExit(f"Unknown emdb_id: {emdb_id!r}")
         return out
-    if priority is not None:
-        return [e for e in entries if int(e.get("priority", 0)) == priority]
     if all_entries:
         return entries
-    raise SystemExit("Specify --all, --priority N, or --emdb-id <id>")
+    raise SystemExit("Specify --all or --emdb-id <id>")
 
 
 def verify_entry(state: dict) -> EntryResult:
@@ -299,7 +295,7 @@ def _tally(entry: EntryResult) -> tuple[int, int, int]:
 
 def _run_expansion(args: argparse.Namespace) -> tuple[dict, int, int, int]:
     data = _load_manifest(args.manifest or EXPANSION_MANIFEST)
-    pairs = _select_pairs(data, pair_id=args.pair, tier=args.tier, all_pairs=args.all or args.everything)
+    pairs = _select_pairs(data, pair_id=args.pair, all_pairs=args.all or args.everything)
 
     print(f"Expansion manifest: {args.manifest or EXPANSION_MANIFEST}", flush=True)
     print(f"Pairs selected: {len(pairs)}", flush=True)
@@ -312,8 +308,8 @@ def _run_expansion(args: argparse.Namespace) -> tuple[dict, int, int, int]:
 
     for pair in pairs:
         pid = pair["id"]
-        print(f"\n=== Pair: {pid} (tier {pair.get('tier')}) — {pair.get('description', '')}", flush=True)
-        pair_report = {"id": pid, "tier": pair.get("tier"), "entries": []}
+        print(f"\n=== Pair: {pid} — {pair.get('description', '')}", flush=True)
+        pair_report = {"id": pid, "entries": []}
 
         for state in pair["states"]:
             emdb_id = state["emdb_id"]
@@ -341,7 +337,6 @@ def _run_publication(args: argparse.Namespace) -> tuple[dict, int, int, int]:
     entries = _select_publication(
         data,
         emdb_id=args.emdb_id,
-        priority=args.priority,
         all_entries=args.all or args.everything,
     )
 
@@ -381,8 +376,6 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--publication", action="store_true", help="Single-map publication cohort")
     p.add_argument("--everything", action="store_true", help="Both expansion pairs and publication singles")
     p.add_argument("--all", action="store_true", help="All items in the selected manifest(s)")
-    p.add_argument("--tier", type=int, choices=[1, 2, 3], help="Expansion: one tier only")
-    p.add_argument("--priority", type=int, choices=[1, 2, 3], help="Publication: one priority only")
     p.add_argument("--pair", type=str, help="Expansion: one pair id")
     p.add_argument("--emdb-id", type=str, help="Publication: one EMDB id")
     p.add_argument("--verify-only", action="store_true")
@@ -392,9 +385,9 @@ def main(argv: list[str] | None = None) -> int:
     args = p.parse_args(argv)
 
     if not args.expansion and not args.publication and not args.everything:
-        if args.pair or args.tier is not None:
+        if args.pair:
             args.expansion = True
-        elif args.emdb_id or args.priority is not None:
+        elif args.emdb_id:
             args.publication = True
         elif args.all:
             args.expansion = True
