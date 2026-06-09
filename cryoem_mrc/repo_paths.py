@@ -9,6 +9,12 @@ OUTPUTS_ROOT = Path("outputs")
 PDB_ROOT = Path("pdb")
 COHORT_MANIFEST = Path("cohort/manifest.csv")
 
+# Canonical anchor map for thesis validation panels (Decision 004).
+ANCHOR_EMDB_ID = "49450"
+
+# Subset of b_factor manifest rows worth B-factor validation figures in the thesis.
+BFACTOR_VALIDATION_EMDB_IDS: tuple[str, ...] = ("49450", "44471", "28498")
+
 
 def emd_output_dir(emdb_id: str | int) -> Path:
     return OUTPUTS_ROOT / f"emd_{str(emdb_id).strip()}"
@@ -29,6 +35,10 @@ def lh_map_reliability_dir(emdb_id: str | int) -> Path:
 
 def thesis_overview_dir(emdb_id: str | int = "49450") -> Path:
     return emd_output_dir(emdb_id) / "thesis_overview"
+
+
+def locres_blocres_mrc(emdb_id: str | int) -> Path:
+    return emd_output_dir(emdb_id) / "locres_blocres.mrc"
 
 
 def halfmap_metrics_npz(emdb_id: str | int) -> Path:

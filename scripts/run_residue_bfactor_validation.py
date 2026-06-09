@@ -11,6 +11,9 @@ Example::
     # EMD-49450 (anchor)
     python scripts/run_residue_bfactor_validation.py --emd-id 49450
 
+    # Thesis anchor maps (default for rerun_all_figures)
+    python scripts/run_residue_bfactor_validation.py --anchors
+
     # All manifest rows with flexibility_source=b_factor and local PDB
     python scripts/run_residue_bfactor_validation.py --all
 """
@@ -28,9 +31,11 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
 
-from style.nature import PALETTES, apply, savefig as save_nature
+from style.nature import PALETTES, apply, label_panel, savefig as save_nature
 
-from cryoem_mrc.repo_paths import COHORT_MANIFEST
+from cryoem_mrc.figure_cleanup import prune_lh_retired_figures
+from cryoem_mrc.reliability import BUILD_ZONE_COLORS, BUILD_ZONE_LABELS
+from cryoem_mrc.repo_paths import BFACTOR_VALIDATION_EMDB_IDS, COHORT_MANIFEST
 from cryoem_mrc.structure_validation import (
     BfactorValidationStats,
     load_cohort_manifest_row,
@@ -41,7 +46,17 @@ from cryoem_mrc.structure_validation import (
 def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("--emd-id", type=str, default=None, help="Single EMDB ID (e.g. 49450)")
+    p.add_argument(
+        "--anchors",
+        action="store_true",
+        help=f"Run thesis anchor IDs: {', '.join(BFACTOR_VALIDATION_EMDB_IDS)}",
+    )
     p.add_argument("--all", action="store_true", help="Run all b_factor rows in manifest with local PDB")
+    p.add_argument(
+        "--prune-retired-figures",
+        action="store_true",
+        help="Delete retired bfactor_vs_reliability / bfactor_by_build_zone exports",
+    )
     p.add_argument("--manifest", type=Path, default=COHORT_MANIFEST)
     p.add_argument("--reliability-npz", type=Path, default=None)
     p.add_argument("--reference", type=Path, default=None, help="Override deposited primary map")
@@ -61,15 +76,56 @@ def _sampling_label(radius: int) -> str:
     return f"{side}³ voxel window mean"
 
 
-def _plot_scatter(rows_in_mask, out: Path, *, emd_id: str, dpi: int) -> None:
+def _plot_bfactor_validation_panel(
+    rows_in_mask,
+    stats: BfactorValidationStats,
+    out: Path,
+    *,
+    emd_id: str,
+    dpi: int,
+) -> None:
     b = np.array([r.b_iso for r in rows_in_mask])
     rel = np.array([r.reliability_score for r in rows_in_mask])
-    fig, ax = plt.subplots(figsize=(6, 5))
-    apply(ax)
-    ax.scatter(b, rel, s=8, alpha=0.35, c=PALETTES["categorical"][0], edgecolors="none")
-    ax.set_xlabel("Deposited B_iso (model)")
-    ax.set_ylabel("reliability_score (map)")
-    ax.set_title(f"EMD-{emd_id}: B-factor vs reliability (in-mask Cα)")
+    rho = stats.spearman_b_vs_reliability
+
+    fig, axes = plt.subplots(1, 2, figsize=(10.5, 4.5))
+    ax_sc, ax_bar = axes
+
+    apply(ax_sc)
+    ax_sc.scatter(b, rel, s=8, alpha=0.35, c=PALETTES["categorical"][0], edgecolors="none")
+    ax_sc.set_xlabel("Deposited B_iso (model)")
+    ax_sc.set_ylabel("reliability_score (map)")
+    rho_txt = f", ρ={rho:+.3f}" if np.isfinite(rho) else ""
+    ax_sc.set_title(f"B-factor vs reliability (in-mask Cα{rho_txt})")
+    label_panel(ax_sc, "a")
+
+    apply(ax_bar)
+    zones = [z for z in (0, 1, 2) if z in stats.median_b_by_zone]
+    labels = [BUILD_ZONE_LABELS[z] for z in zones]
+    medians = [stats.median_b_by_zone[z] for z in zones]
+    colors = [BUILD_ZONE_COLORS[z] for z in zones]
+    bars = ax_bar.bar(labels, medians, color=colors, edgecolor="0.2", linewidth=0.6)
+    ax_bar.set_ylabel("Median B_iso")
+    ax_bar.set_title("Median B_iso by build zone")
+    for bar, val in zip(bars, medians):
+        ax_bar.text(
+            bar.get_x() + bar.get_width() / 2,
+            bar.get_height(),
+            f"{val:.1f}",
+            ha="center",
+            va="bottom",
+            fontsize=9,
+        )
+    from matplotlib.patches import Patch
+
+    ax_bar.legend(
+        handles=[Patch(facecolor=BUILD_ZONE_COLORS[z], label=BUILD_ZONE_LABELS[z]) for z in (0, 1, 2)],
+        loc="upper right",
+        fontsize=8,
+    )
+    label_panel(ax_bar, "b")
+
+    fig.suptitle(f"EMD-{emd_id}: B-factor external validation", fontsize=12)
     fig.tight_layout()
     save_nature(fig, out, dpi=dpi)
     plt.close(fig)
@@ -87,6 +143,7 @@ def _run_one(
     features_npz: Path | None,
     window_radius: int,
     dpi: int,
+    prune_retired_figures: bool,
 ) -> int:
     try:
         code, rows, stats, out_dir = run_emdb_bfactor_validation(
@@ -136,7 +193,17 @@ def _run_one(
         + "\n"
     )
     if rows_in_mask:
-        _plot_scatter(rows_in_mask, fig_dir / "bfactor_vs_reliability.png", emd_id=emd_id, dpi=dpi)
+        _plot_bfactor_validation_panel(
+            rows_in_mask,
+            stats,
+            fig_dir / "bfactor_validation_panel.png",
+            emd_id=emd_id,
+            dpi=dpi,
+        )
+    if prune_retired_figures:
+        removed = prune_lh_retired_figures(fig_dir)
+        if removed:
+            print(f"[bfactor_validation] pruned {len(removed)} retired figure(s)", flush=True)
 
     print(
         f"[bfactor_validation] EMD-{emd_id}: n={stats.n_in_mask} in-mask, "
@@ -164,11 +231,16 @@ def _emd_ids_for_all(manifest: Path) -> list[str]:
 
 def main(argv: list[str] | None = None) -> int:
     args = _parse_args(argv)
-    if not args.all and not args.emd_id:
-        print("Specify --emd-id or --all", file=sys.stderr)
+    if not args.all and not args.emd_id and not args.anchors:
+        print("Specify --emd-id, --anchors, or --all", file=sys.stderr)
         return 2
 
-    ids = _emd_ids_for_all(args.manifest) if args.all else [args.emd_id.strip()]
+    if args.all:
+        ids = _emd_ids_for_all(args.manifest)
+    elif args.anchors:
+        ids = list(BFACTOR_VALIDATION_EMDB_IDS)
+    else:
+        ids = [args.emd_id.strip()]
     rc = 0
     for emd_id in ids:
         code = _run_one(
@@ -182,6 +254,7 @@ def main(argv: list[str] | None = None) -> int:
             features_npz=args.features_npz,
             window_radius=args.window_radius,
             dpi=args.dpi,
+            prune_retired_figures=args.prune_retired_figures,
         )
         rc = max(rc, code)
     return rc

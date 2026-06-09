@@ -29,6 +29,13 @@ from .cohort_composition import resolve_cohort_na_residue_fraction
 from .repo_paths import COHORT_MANIFEST, OUTPUTS_ROOT
 from .structure_validation import load_cohort_manifest_row
 
+# Half-map CC and local resolution (Å) are inversely related; use the same diverging
+# map with reversed direction so green = reliable / sharp in both panels.
+RELIABILITY_CMAP_CC = "RdYlGn"
+RELIABILITY_CMAP_LOCRES = "RdYlGn_r"
+CC_CBAR_LABEL = "CC (high = reliable)"
+LOCRES_CBAR_LABEL = "Å (low = sharper)"
+
 
 def pick_slice_index(
     mask: np.ndarray,
@@ -156,6 +163,26 @@ def _robust_limits(
     return float(lo), float(hi)
 
 
+def _locres_robust_limits(
+    res_sl: np.ndarray,
+    mask_sl: np.ndarray,
+    *,
+    lo_pct: float = 5.0,
+    hi_pct: float = 95.0,
+    default_lo: float = 2.0,
+    default_hi: float = 8.0,
+) -> tuple[float, float]:
+    """In-mask percentile limits for local-resolution slice panels."""
+    masked = mask_slice_values(res_sl, mask_sl)
+    finite = masked[np.isfinite(masked)]
+    if finite.size == 0:
+        return default_lo, default_hi
+    return (
+        float(np.nanpercentile(finite, lo_pct)),
+        float(np.nanpercentile(finite, hi_pct)),
+    )
+
+
 def _add_scale_bar(
     ax: plt.Axes,
     *,
@@ -263,23 +290,21 @@ def plot_local_resolution_slice(
     z = slice_index if slice_index is not None else pick_slice_index(mask, axis=axis)
     sl = extract_slice(local_res_a, axis=axis, index=z)
     msl = extract_slice(mask, axis=axis, index=z)
-    masked = mask_slice_values(sl, msl)
-    finite = masked[np.isfinite(masked)]
-    if vmin_a is None:
-        vmin_a = float(np.nanpercentile(finite, 5)) if finite.size else 2.0
-    if vmax_a is None:
-        vmax_a = float(np.nanpercentile(finite, 95)) if finite.size else 8.0
+    if vmin_a is None or vmax_a is None:
+        lo, hi = _locres_robust_limits(sl, msl)
+        vmin_a = lo if vmin_a is None else vmin_a
+        vmax_a = hi if vmax_a is None else vmax_a
 
     fig, ax = plt.subplots(figsize=figsize)
     plot_masked_slice(
         ax,
         sl,
         msl,
-        cmap="viridis_r",
+        cmap=RELIABILITY_CMAP_LOCRES,
         vmin=vmin_a,
         vmax=vmax_a,
         robust=False,
-        cbar_label="Å (lower = sharper)",
+        cbar_label=LOCRES_CBAR_LABEL,
         title=f"{title}\nZ = {z}",
         crop_bbox=crop_bbox,
     )
@@ -322,12 +347,10 @@ def plot_parallel_reliability_readouts(
     res_sl = extract_slice(local_res_a, axis=axis, index=z)
     msl = extract_slice(mask, axis=axis, index=z)
 
-    res_masked = mask_slice_values(res_sl, msl)
-    finite = res_masked[np.isfinite(res_masked)]
-    if res_vmin_a is None:
-        res_vmin_a = float(np.nanpercentile(finite, 5)) if finite.size else 2.0
-    if res_vmax_a is None:
-        res_vmax_a = float(np.nanpercentile(finite, 95)) if finite.size else 8.0
+    if res_vmin_a is None or res_vmax_a is None:
+        lo, hi = _locres_robust_limits(res_sl, msl)
+        res_vmin_a = lo if res_vmin_a is None else res_vmin_a
+        res_vmax_a = hi if res_vmax_a is None else res_vmax_a
 
     fig, axes = plt.subplots(1, 3, figsize=(14.0, 5.0))
     kw = {"crop_bbox": crop_bbox}
@@ -345,11 +368,11 @@ def plot_parallel_reliability_readouts(
         axes[1],
         cc_sl,
         msl,
-        cmap="RdYlGn",
+        cmap=RELIABILITY_CMAP_CC,
         vmin=cc_vmin,
         vmax=cc_vmax,
         robust=False,
-        cbar_label="CC (↑ reliable)",
+        cbar_label=CC_CBAR_LABEL,
         title="Half-map local CC",
         already_contoured=True,
         **kw,
@@ -358,11 +381,11 @@ def plot_parallel_reliability_readouts(
         axes[2],
         res_sl,
         msl,
-        cmap="viridis_r",
+        cmap=RELIABILITY_CMAP_LOCRES,
         vmin=res_vmin_a,
         vmax=res_vmax_a,
         robust=False,
-        cbar_label="Å (↓ sharper)",
+        cbar_label=LOCRES_CBAR_LABEL,
         title="Local FSC resolution",
         already_contoured=True,
         **kw,
@@ -393,6 +416,7 @@ def plot_feature_family_panel(
     cmap: str = "magma",
     cmap_overrides: Mapping[str, str] | None = None,
     subtitles: Mapping[str, str] | None = None,
+    cbar_labels: Mapping[str, str] | None = None,
     save_path: str | Path | None = None,
     dpi: int = 200,
     ncol: int | None = None,
@@ -409,6 +433,7 @@ def plot_feature_family_panel(
     axes_flat = np.atleast_1d(axes).ravel()
     overrides = dict(cmap_overrides or {})
     subs = dict(subtitles or {})
+    cbars = dict(cbar_labels or {})
     msl = extract_slice(mask, axis=axis, index=slice_index)
 
     for ax, key in zip(axes_flat, keys):
@@ -420,7 +445,7 @@ def plot_feature_family_panel(
             sl,
             msl,
             cmap=cm,
-            cbar_label=None,
+            cbar_label=cbars.get(key, subs.get(key, key.replace("_", " "))),
             title=subs.get(key, key.replace("_", " ")),
             already_contoured=True,
             crop_bbox=crop_bbox,
@@ -455,12 +480,10 @@ def plot_reliability_pair_only(
     msl = extract_slice(mask, axis=axis, index=slice_index)
     cc_sl = extract_slice(local_cc, axis=axis, index=slice_index)
     res_sl = extract_slice(local_res_a, axis=axis, index=slice_index)
-    res_masked = mask_slice_values(res_sl, msl)
-    finite = res_masked[np.isfinite(res_masked)]
-    if res_vmin_a is None:
-        res_vmin_a = float(np.nanpercentile(finite, 5)) if finite.size else 2.0
-    if res_vmax_a is None:
-        res_vmax_a = float(np.nanpercentile(finite, 95)) if finite.size else 8.0
+    if res_vmin_a is None or res_vmax_a is None:
+        lo, hi = _locres_robust_limits(res_sl, msl)
+        res_vmin_a = lo if res_vmin_a is None else res_vmin_a
+        res_vmax_a = hi if res_vmax_a is None else res_vmax_a
 
     fig, axes = plt.subplots(1, 2, figsize=(10.0, 5.0))
     kw = {"crop_bbox": crop_bbox, "already_contoured": True}
@@ -468,11 +491,11 @@ def plot_reliability_pair_only(
         axes[0],
         cc_sl,
         msl,
-        cmap="RdYlGn",
+        cmap=RELIABILITY_CMAP_CC,
         vmin=cc_vmin,
         vmax=cc_vmax,
         robust=False,
-        cbar_label="CC",
+        cbar_label=CC_CBAR_LABEL,
         title="Windowed half-map CC",
         **kw,
     )
@@ -480,11 +503,11 @@ def plot_reliability_pair_only(
         axes[1],
         res_sl,
         msl,
-        cmap="viridis_r",
+        cmap=RELIABILITY_CMAP_LOCRES,
         vmin=res_vmin_a,
         vmax=res_vmax_a,
         robust=False,
-        cbar_label="Å",
+        cbar_label=LOCRES_CBAR_LABEL,
         title="Local FSC resolution",
         **kw,
     )
@@ -2677,6 +2700,10 @@ def plot_conformation_pair_summary_triptych(
 
 
 __all__ = [
+    "CC_CBAR_LABEL",
+    "LOCRES_CBAR_LABEL",
+    "RELIABILITY_CMAP_CC",
+    "RELIABILITY_CMAP_LOCRES",
     "pick_slice_index",
     "extract_slice",
     "SliceCrop",

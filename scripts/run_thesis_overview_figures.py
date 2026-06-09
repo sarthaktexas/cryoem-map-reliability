@@ -34,10 +34,21 @@ from cryoem_mrc.analysis import build_contour_mask
 from cryoem_mrc.io import load_mrc
 from cryoem_mrc.local_resolution_io import load_local_resolution_map
 from cryoem_mrc.map_grid import load_map_grid
-from cryoem_mrc.repo_paths import DATA_ROOT, analysis_dir, thesis_overview_dir
+from cryoem_mrc.repo_paths import (
+    DATA_ROOT,
+    analysis_dir,
+    find_features_npz,
+    locres_blocres_mrc,
+    thesis_overview_dir,
+)
 from cryoem_mrc.rigidity import compute_rigidity_map_from_npz
 from cryoem_mrc.thesis_figures import (
+    CC_CBAR_LABEL,
+    LOCRES_CBAR_LABEL,
+    RELIABILITY_CMAP_CC,
+    RELIABILITY_CMAP_LOCRES,
     SliceCrop,
+    _locres_robust_limits,
     apply_contour_mask,
     crop_slice_2d,
     extract_slice,
@@ -78,7 +89,14 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help="Deposited primary map for contour mask (default: emd_<ID>.map in data-dir)",
     )
     p.add_argument("--avg-map", type=Path, default=None, help="Averaged map for density panels")
-    p.add_argument("--local-fsc", type=Path, default=None)
+    p.add_argument(
+        "--local-res",
+        "--local-fsc",
+        type=Path,
+        default=None,
+        dest="local_res",
+        help="Å local-resolution MRC (BlocRes locres_blocres.mrc preferred when present)",
+    )
     p.add_argument("--features", type=Path, default=None)
     p.add_argument(
         "--halfmap-npz",
@@ -135,8 +153,16 @@ def _resolve_paths(args: argparse.Namespace) -> dict[str, Path]:
     return {
         "reference": args.reference or d / f"{emd}.map",
         "avg": args.avg_map or d / f"{emd}_avg.map",
-        "local_fsc": args.local_fsc or d / f"{emd}_local_fsc_t0143_P17_s4.mrc",
-        "features": args.features or d / f"{emd}_avg_features_t0116.npz",
+        "local_res": (
+            args.local_res
+            or (locres_blocres_mrc(args.emd_id) if locres_blocres_mrc(args.emd_id).is_file() else None)
+            or d / f"{emd}_local_fsc_t0143_P17_s4.mrc"
+        ),
+        "features": (
+            args.features
+            or find_features_npz(d, args.emd_id, args.contour)
+            or d / f"{emd}_avg_features_t0116.npz"
+        ),
         "halfmap_npz": args.halfmap_npz,
         "correlations": args.correlations,
         "rigidity_cache": args.rigidity_cache or out / f"{emd}_rigidity_cache.npy",
@@ -309,8 +335,8 @@ def main(argv: list[str] | None = None) -> int:
     local_cc: np.ndarray | None = None
 
     if need_cc_res:
-        print(f"[thesis_figures] loading local FSC {paths['local_fsc'].name}")
-        local_res = np.asarray(load_local_resolution_map(paths["local_fsc"]).data, dtype=np.float32)
+        print(f"[thesis_figures] loading local resolution {paths['local_res'].name}")
+        local_res = np.asarray(load_local_resolution_map(paths["local_res"]).data, dtype=np.float32)
         print("[thesis_figures] loading half-map CC from NPZ")
         with np.load(paths["halfmap_npz"], allow_pickle=False) as hm:
             local_cc = np.asarray(hm["local_cross_correlation"], dtype=np.float32)
@@ -320,7 +346,7 @@ def main(argv: list[str] | None = None) -> int:
                 file=sys.stderr,
             )
             return 2
-        print("[thesis_figures] applying contour mask to local FSC and half-map CC volumes")
+        print("[thesis_figures] applying contour mask to local resolution and half-map CC volumes")
         local_res = apply_contour_mask(local_res, mask)
         local_cc = apply_contour_mask(local_cc, mask)
 
@@ -484,6 +510,7 @@ def main(argv: list[str] | None = None) -> int:
             d_sl,
             msl,
             cmap="gray",
+            cbar_label="density",
             title=f"Averaged map Z={z}",
             already_contoured=True,
             crop_bbox=crop_bbox,
@@ -497,10 +524,14 @@ def main(argv: list[str] | None = None) -> int:
         msl_show = crop_slice_2d(msl.astype(float), crop_bbox) if crop_bbox else msl.astype(float)
         fig, ax = plt.subplots(figsize=(6.0, 5.5))
         apply(ax)
-        ax.imshow(msl_show, cmap="Greys", origin="lower", vmin=0, vmax=1)
+        im = ax.imshow(msl_show, cmap="Greys", origin="lower", vmin=0, vmax=1)
         ax.set_title(f"Contour mask (ρ ≥ {args.contour}) Z={z}")
         ax.set_xticks([])
         ax.set_yticks([])
+        cb = fig.colorbar(im, ax=ax, fraction=0.046, pad=0.02, ticks=[0, 1])
+        cb.ax.set_yticklabels(["outside", "inside"])
+        cb.set_label("mask", fontsize=9)
+        cb.ax.tick_params(labelsize=8)
         fig.tight_layout()
         _save_fig(fig, _fig_export(out_dir, "mask_slice"), dpi)
 
@@ -525,7 +556,7 @@ def main(argv: list[str] | None = None) -> int:
                 )
         if local_res is None:
             local_res = apply_contour_mask(
-                np.asarray(load_local_resolution_map(paths["local_fsc"]).data, dtype=np.float32),
+                np.asarray(load_local_resolution_map(paths["local_res"]).data, dtype=np.float32),
                 mask,
             )
         if rigidity_vol is None and paths["rigidity_cache"].exists():
@@ -543,27 +574,55 @@ def main(argv: list[str] | None = None) -> int:
             mask,
         )
 
-        fig, axes = plt.subplots(1, 6, figsize=(20.0, 4.2))
-        panels: list[tuple[np.ndarray, str, str]] = [
-            (d_sl, "gray", "ρ avg"),
-            (extract_slice(local_cc, axis=0, index=z), "RdYlGn", "half-map CC"),
-            (extract_slice(local_res, axis=0, index=z), "viridis_r", "local res Å"),
-            (extract_slice(lv["local_variance"], axis=0, index=z), "magma", "local var"),
-            (extract_slice(lv["gauss_s2"], axis=0, index=z), "inferno", "Gσ mid"),
-            (extract_slice(rigidity_vol, axis=0, index=z), "viridis", "rigidity"),
+        res_sl = extract_slice(local_res, axis=0, index=z)
+        res_lo, res_hi = _locres_robust_limits(res_sl, msl)
+        fig, axes = plt.subplots(1, 6, figsize=(22.0, 4.5))
+        panels: list[tuple[np.ndarray, str, str, str, dict]] = [
+            (d_sl, "gray", "ρ avg", "density", {}),
+            (
+                extract_slice(local_cc, axis=0, index=z),
+                RELIABILITY_CMAP_CC,
+                "half-map CC",
+                CC_CBAR_LABEL,
+                {"vmin": 0.0, "vmax": 1.0, "robust": False},
+            ),
+            (
+                res_sl,
+                RELIABILITY_CMAP_LOCRES,
+                "local res Å",
+                LOCRES_CBAR_LABEL,
+                {"vmin": res_lo, "vmax": res_hi, "robust": False},
+            ),
+            (
+                extract_slice(lv["local_variance"], axis=0, index=z),
+                "magma",
+                "local var",
+                "variance",
+                {},
+            ),
+            (
+                extract_slice(lv["gauss_s2"], axis=0, index=z),
+                "inferno",
+                "Gσ mid",
+                "Gσ * ρ",
+                {},
+            ),
+            (
+                extract_slice(rigidity_vol, axis=0, index=z),
+                "viridis",
+                "rigidity",
+                "rigidity",
+                {},
+            ),
         ]
-        for letter, (ax, (sl, cm, title)) in zip("abcdef", zip(axes, panels)):
-            kw: dict = {"cmap": cm, "crop_bbox": crop_bbox, "already_contoured": True}
-            if title == "half-map CC":
-                kw.update(vmin=0.0, vmax=1.0, robust=False)
-            elif title == "local res Å":
-                masked = mask_slice_values(sl, msl)
-                fin = masked[np.isfinite(masked)]
-                kw.update(
-                    vmin=float(np.nanpercentile(fin, 5)) if fin.size else 2.0,
-                    vmax=float(np.nanpercentile(fin, 95)) if fin.size else 8.0,
-                    robust=False,
-                )
+        for letter, (ax, (sl, cm, title, cbar_label, extra_kw)) in zip("abcdef", zip(axes, panels)):
+            kw: dict = {
+                "cmap": cm,
+                "crop_bbox": crop_bbox,
+                "already_contoured": True,
+                "cbar_label": cbar_label,
+                **extra_kw,
+            }
             plot_masked_slice(ax, sl, msl, title=title, **kw)
             label_panel(ax, letter)
         fig.suptitle(
@@ -575,8 +634,9 @@ def main(argv: list[str] | None = None) -> int:
 
     run_job("overview_composite_row", _composite)
 
-    # Manifest lists every expected PDF from save_nature (thesis overview = all 2D).
-    expected = [_fig_export(out_dir, job) for job in FIGURE_JOBS]
+    # Manifest lists expected PDFs (all jobs, or only those requested via --only).
+    jobs_expected = tuple(args.only) if args.only else FIGURE_JOBS
+    expected = [_fig_export(out_dir, job) for job in jobs_expected]
     manifest = out_dir / "MANIFEST.txt"
     manifest.write_text(
         "\n".join(

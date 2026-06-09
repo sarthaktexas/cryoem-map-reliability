@@ -3,43 +3,41 @@
 
 Example::
 
-    uv run python scripts/rerun_all_figures.py --core-only
+    uv run python scripts/rerun_all_figures.py
 """
 
 from __future__ import annotations
 
-import argparse
 import csv
 import subprocess
 import sys
 from pathlib import Path
 
-from cryoem_mrc.repo_paths import COHORT_MANIFEST, find_features_npz, halfmap_metrics_npz, lh_map_reliability_dir
+from cryoem_mrc.repo_paths import (
+    BFACTOR_VALIDATION_EMDB_IDS,
+    COHORT_MANIFEST,
+    find_features_npz,
+    halfmap_metrics_npz,
+    lh_map_reliability_dir,
+)
 
 REPO = Path(__file__).resolve().parents[1]
 PY = REPO / ".venv" / "bin" / "python"
 SKIP_SOURCES = frozenset({"excluded", "optional"})
 
-# Pre-expansion validation cohort (active maps in COHORT.md).
-CORE_COHORT_IDS = frozenset({
-    "49450",
-    "11638",
-    "23129",
-    "23130",
-    "48923",
-    "48534",
-    "16091",
-    "41756",
-    "45261",
-    "61596",
-    "52525",
-    "52515",
-})
-
 CONFORMATION_PAIRS = [
     ("23129", "23130"),
-    ("49450", "48534"),
+    ("41596", "41598"),
+    ("48923", "48534"),  # MgtA E2·Mg·BeF₃ vs E2P·Mg (canonical cycle pair)
+    ("24120", "25418"),
+    ("45604", "45603"),
+    ("28498", "28487"),
+    ("13308", "16119"),
+    ("4940", "4941"),
+    ("11497", "11494"),
+    # 49450-based MgtA pairs: assembly mismatch (3556 vs ~888–1778 Cα); supplementary only
     ("49450", "48923"),
+    ("49450", "48534"),
 ]
 
 
@@ -68,24 +66,12 @@ def manifest_rows(*, emdb_ids: frozenset[str] | None) -> list[dict[str, str]]:
     return rows
 
 
-def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
-    p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    p.add_argument(
-        "--core-only",
-        action="store_true",
-        help="Regenerate only the 12-map pre-expansion cohort (default: all manifest rows)",
-    )
-    return p.parse_args(argv)
-
-
 def main(argv: list[str] | None = None) -> int:
-    args = _parse_args(argv)
     if not PY.is_file():
         print("Missing .venv/bin/python — run: uv pip install -e .", file=sys.stderr)
         return 2
 
-    emdb_ids = CORE_COHORT_IDS if args.core_only else None
-    rows = manifest_rows(emdb_ids=emdb_ids)
+    rows = manifest_rows(emdb_ids=None)
     if not rows:
         print("[figures] no manifest rows matched", file=sys.stderr)
         return 2
@@ -139,31 +125,48 @@ def main(argv: list[str] | None = None) -> int:
                     str(metrics),
                     "--out-dir",
                     str(lh_dir),
+                    "--prune-retired-figures",
                 ],
                 f"lh_map_reliability EMD-{eid}",
             ),
         )
 
-    for row in rows:
+    rc = max(
+        rc,
+        run(
+            [str(PY), "scripts/prune_retired_figures.py"],
+            "prune retired analysis/lh scatter figures",
+        ),
+    )
+
+    manifest_by_id = {str(r["emdb_id"]).strip(): r for r in rows}
+    for eid in BFACTOR_VALIDATION_EMDB_IDS:
+        row = manifest_by_id.get(eid)
+        if row is None:
+            print(f"[figures] skip bfactor EMD-{eid}: not in manifest", flush=True)
+            continue
         if row.get("flexibility_source", "").strip() != "b_factor":
+            print(f"[figures] skip bfactor EMD-{eid}: flexibility_source != b_factor", flush=True)
             continue
         pdb = Path(row.get("flexibility_path_or_pdb", ""))
         if not pdb.is_file():
+            print(f"[figures] skip bfactor EMD-{eid}: no PDB", flush=True)
             continue
-        eid = str(row["emdb_id"]).strip()
         rc = max(
             rc,
             run(
-                [str(PY), "scripts/run_residue_bfactor_validation.py", "--emd-id", eid],
+                [
+                    str(PY),
+                    "scripts/run_residue_bfactor_validation.py",
+                    "--emd-id",
+                    eid,
+                    "--prune-retired-figures",
+                ],
                 f"B-factor validation EMD-{eid}",
             ),
         )
 
-    if args.core_only:
-        pairs = [p for p in CONFORMATION_PAIRS if p[0] in CORE_COHORT_IDS and p[1] in CORE_COHORT_IDS]
-    else:
-        pairs = CONFORMATION_PAIRS
-    for emd_a, emd_b in pairs:
+    for emd_a, emd_b in CONFORMATION_PAIRS:
         rc = max(
             rc,
             run(

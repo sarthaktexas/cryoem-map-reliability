@@ -27,6 +27,10 @@ def _embed_volume_features(
     for key, arr in block.items():
         if key == "density_raw":
             continue
+        if np.asarray(arr).ndim != 3:
+            # e.g. multiscale_sigmas (k,) — store as-is, do not embed on the grid
+            out[key] = arr
+            continue
         out[key] = embed_array(full_shape, bbox, arr, dtype=arr.dtype)
     return out
 

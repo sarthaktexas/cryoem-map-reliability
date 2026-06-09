@@ -4,7 +4,8 @@ Generates under ``outputs/emd_<ID>/lh_map_reliability/``:
 
 - ``reliability.npz`` — reliability_score, H_repro, LH maps (T, V, L), build_zone
 - ``*.mrc`` — volume overlays on deposited reference grid
-- ``figures/`` — slice panels, correlation bars, build-zone map, CC vs reliability
+- ``figures/model_building_row.png`` — CC, reliability score, build zones (one slice)
+- ``../analysis/figures/analysis_validation_panel.png`` — anchor map only (2×2 validation)
 - ``LH_MAP_RELIABILITY_RESULTS.md`` — per-map results (methods in docs/LH_MAP_RELIABILITY.md)
 
 Example::
@@ -27,18 +28,32 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
 
-from style.nature import PALETTES, apply, label_panel, savefig as save_nature
+from style.nature import apply, label_panel, savefig as save_nature
 from scipy import stats
 
-from cryoem_mrc.analysis import build_contour_mask, compute_feature_target_correlations
+from cryoem_mrc.analysis import (
+    build_contour_mask,
+    compute_feature_target_correlations,
+    plot_analysis_validation_panel,
+)
+from cryoem_mrc.figure_cleanup import prune_lh_retired_figures
+from cryoem_mrc.pipeline import load_feature_maps
 from cryoem_mrc.io import load_mrc
 from cryoem_mrc.map_grid import load_full_and_half_maps
 from cryoem_mrc.reliability import (
+    BUILD_ZONE_LABELS,
     attach_reliability_to_features,
+    build_zone_colormap,
     save_build_zone_mrc,
     save_reliability_mrc,
 )
-from cryoem_mrc.repo_paths import DATA_ROOT, halfmap_metrics_npz, lh_map_reliability_dir
+from cryoem_mrc.repo_paths import (
+    ANCHOR_EMDB_ID,
+    DATA_ROOT,
+    analysis_dir,
+    halfmap_metrics_npz,
+    lh_map_reliability_dir,
+)
 from cryoem_mrc.mask_bbox import (
     bbox_from_mask,
     crop_array,
@@ -75,6 +90,21 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         action="store_true",
         help="Compute H_repro on the full grid (default: tight bbox around contour mask)",
     )
+    p.add_argument(
+        "--write-analysis-panel",
+        action="store_true",
+        help=f"Write 2×2 validation panel under analysis/figures/ (default for EMD-{ANCHOR_EMDB_ID})",
+    )
+    p.add_argument(
+        "--no-write-analysis-panel",
+        action="store_true",
+        help="Skip anchor validation panel even for the canonical anchor map",
+    )
+    p.add_argument(
+        "--prune-retired-figures",
+        action="store_true",
+        help="Delete orphaned spearman/binned/bfactor LH figure exports in figures/",
+    )
     return p.parse_args(argv)
 
 
@@ -90,26 +120,28 @@ def _paths(args: argparse.Namespace) -> dict[str, Path]:
     }
 
 
-def _load_rho_var(features_path: Path) -> tuple[np.ndarray, np.ndarray]:
+def _load_local_var(features_path: Path) -> np.ndarray:
     with np.load(features_path, allow_pickle=False) as d:
-        return (
-            np.asarray(d["density_normalized"], dtype=np.float32),
-            np.asarray(d["local_variance"], dtype=np.float32),
-        )
+        return np.asarray(d["local_variance"], dtype=np.float32)
+
+
+def _zscore_halfmap_average(half1: np.ndarray, half2: np.ndarray) -> np.ndarray:
+    """Global z-score of ρ = ½(h₁+h₂) for LH gradient / constraint V (Decision 001)."""
+    rho = 0.5 * (np.asarray(half1, dtype=np.float32) + np.asarray(half2, dtype=np.float32))
+    mu = float(rho.mean())
+    sig = float(rho.std())
+    return ((rho - mu) / (sig + 1e-6)).astype(np.float32)
 
 
 def _plot_build_zones(ax, zones_sl: np.ndarray, mask_sl: np.ndarray, *, title: str) -> None:
-    from matplotlib.colors import ListedColormap
-
     apply(ax)
     show = np.ma.masked_where(~mask_sl, zones_sl.astype(float))
-    cmap = ListedColormap(PALETTES["categorical"][:3])  # omit, caution, build
-    im = ax.imshow(show, cmap=cmap, vmin=0, vmax=2, origin="lower")
+    im = ax.imshow(show, cmap=build_zone_colormap(), vmin=0, vmax=2, origin="lower")
     ax.set_title(title, fontsize=11)
     ax.set_xticks([])
     ax.set_yticks([])
     cbar = plt.colorbar(im, ax=ax, fraction=0.046, pad=0.02, ticks=[0, 1, 2])
-    cbar.ax.set_yticklabels(["omit", "caution", "build"])
+    cbar.ax.set_yticklabels([BUILD_ZONE_LABELS[z] for z in (0, 1, 2)])
     return im
 
 
@@ -184,6 +216,7 @@ Partial Spearman vs CC controlling for local_variance:
 | `emd_{emd_id}_reliability.mrc` | Reliability overlay (0–1 score) |
 | `emd_{emd_id}_build_zones.mrc` | 0/1/2 zone labels |
 | `figures/model_building_row.png` | CC, reliability score, build zones (one slice) |
+| `../analysis/figures/analysis_validation_panel.png` | Anchor map: 2×2 variance / reliability validation |
 | `run_metadata.json` | Spearman / partial ρ (cohort heatmap reads this) |
 
 **Inputs:** `{paths['reference'].name}`, `{paths['features'].name}`, half-maps, `{paths.get('halfmap_npz', 'halfmap_metrics.npz')}`.
@@ -215,11 +248,12 @@ def main(argv: list[str] | None = None) -> int:
     n_mask = int(mask.sum())
     print(f"[lh_map_reliability] mask {n_mask:,} voxels at contour {args.contour}", flush=True)
 
-    rho, local_var = _load_rho_var(paths["features"])
+    local_var = _load_local_var(paths["features"])
     bundle = load_full_and_half_maps(
         paths["reference"], paths["half1"], paths["half2"],
         reference="full", dtype=np.float32, resample_if_needed=True,
     )
+    rho = _zscore_halfmap_average(bundle.half1.data, bundle.half2.data)
     full_shape = reference.shape
     pad = pad_voxels_for_filters(window=args.window)
     if args.no_crop_to_contour:
@@ -322,18 +356,52 @@ def main(argv: list[str] | None = None) -> int:
         (extract_slice(feats["reliability_score"], axis=0, index=z), "viridis", "reliability score", kw),
         (extract_slice(zones.astype(float), axis=0, index=z), None, "build zones", {}),
     ]
+    cbar_labels = {"half-map CC": "half-map CC", "reliability score": "reliability score"}
     for letter, (ax, (sl, cm, title, pkw)) in zip("abc", zip(axes, panels)):
         if title == "build zones":
             sl_c = sl if crop is None else sl[crop[0]:crop[1], crop[2]:crop[3]]
             m_c = msl if crop is None else msl[crop[0]:crop[1], crop[2]:crop[3]]
             _plot_build_zones(ax, sl_c, m_c, title=f"{title}\nZ={z}")
         else:
-            plot_masked_slice(ax, sl, msl, cmap=cm, title=f"{title}\nZ={z}", **pkw)
+            plot_masked_slice(
+                ax,
+                sl,
+                msl,
+                cmap=cm,
+                title=f"{title}\nZ={z}",
+                cbar_label=cbar_labels.get(title),
+                **pkw,
+            )
         label_panel(ax, letter)
     fig.suptitle(f"EMD-{args.emd_id} model-building guidance (mask ρ≥{args.contour})", fontsize=12)
     fig.tight_layout()
     save_nature(fig, fig_dir / "model_building_row.png", dpi=args.dpi)
     plt.close(fig)
+
+    write_panel = (
+        args.write_analysis_panel
+        or (str(args.emd_id).strip() == ANCHOR_EMDB_ID and not args.no_write_analysis_panel)
+    )
+    if write_panel:
+        feature_maps = load_feature_maps(paths["features"])
+        panel_path = analysis_dir(args.emd_id) / "figures" / "analysis_validation_panel.png"
+        plot_analysis_validation_panel(
+            feature_maps,
+            {"local_cross_correlation": cc},
+            mask,
+            reliability_score=feats["reliability_score"],
+            spearman=spearman,
+            emd_id=str(args.emd_id),
+            contour=args.contour,
+            save_path=panel_path,
+            dpi=args.dpi,
+        )
+        print(f"[lh_map_reliability] wrote {panel_path}", flush=True)
+
+    if args.prune_retired_figures:
+        removed = prune_lh_retired_figures(fig_dir)
+        if removed:
+            print(f"[lh_map_reliability] pruned {len(removed)} retired figure(s)", flush=True)
 
     paths_meta = {**paths, "halfmap_npz": args.halfmap_npz}
     _write_thesis_md(

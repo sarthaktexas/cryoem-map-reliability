@@ -22,10 +22,12 @@ What it produces under ``--out-dir``:
 - ``correlations.csv`` — tidy per-feature Pearson + Spearman against the chosen
   target signal (default ``local_cross_correlation``).
 - ``summary.txt`` — top-N features, mask coverage, scientific caveats.
-- ``figures/halfmap_metric_histograms.png`` — distributions inside vs outside
-  the contour mask.
-- ``figures/{feature}_vs_{target}.png`` — hexbin + binned-mean curve for the
-  top-K features by |Spearman|.
+- ``figures/halfmap_metric_histograms.png`` — CC + repro-SNR inside vs outside mask.
+- ``figures/analysis_validation_panel.png`` — written by ``run_lh_map_reliability_export.py``
+  for the anchor map (EMD-49450): 2×2 variance / reliability validation panel.
+
+Per-map ``{feature}_vs_{target}.png`` scatters are retired (use ``--top-k-figures`` only
+for ad-hoc debugging). Run ``scripts/prune_retired_figures.py`` to delete stale exports.
 
 ``--local-res`` supplies the home-rolled FSC map. Use ``--reliability-target`` to
 choose whether figures/CSV use half-map CC (default), Å local resolution, or both.
@@ -41,6 +43,7 @@ from pathlib import Path
 import numpy as np
 
 from cryoem_mrc.analysis import (
+    HALFMAP_HISTOGRAM_QC_KEYS,
     binned_feature_by_target,
     build_contour_mask,
     compute_feature_target_correlations,
@@ -51,6 +54,7 @@ from cryoem_mrc.analysis import (
     write_correlation_csv,
     write_summary_text,
 )
+from cryoem_mrc.figure_cleanup import prune_analysis_scatter_figures
 from cryoem_mrc.mask_bbox import format_bbox_log, pad_voxels_for_filters
 from cryoem_mrc.half_map_repro import save_half_map_metrics_mrc
 from cryoem_mrc.local_resolution_io import (
@@ -79,8 +83,17 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
                    help="Which half-map metric to use as the analysis target")
     p.add_argument("--max-samples", type=int, default=2_000_000,
                    help="Subsample size for correlations (None disables; default 2e6)")
-    p.add_argument("--top-k-figures", type=int, default=4,
-                   help="How many feature-vs-target scatter plots to generate")
+    p.add_argument(
+        "--top-k-figures",
+        type=int,
+        default=0,
+        help="Legacy per-feature scatter PNGs (0 = off; anchor panel from lh export)",
+    )
+    p.add_argument(
+        "--prune-scatter-figures",
+        action="store_true",
+        help="Delete retired *_vs_* scatter PNG/PDF under figures/ after run",
+    )
     p.add_argument("--out-dir", required=True, type=Path)
     p.add_argument("--skip-halfmap-metrics", action="store_true",
                    help="If outputs/halfmap_metrics.npz already exists, skip recompute")
@@ -136,20 +149,22 @@ def _run_correlation_pass(
         key=lambda c: abs(c.correlation) if np.isfinite(c.correlation) else -1.0,
         reverse=True,
     )
-    for c in spearman_rows[:top_k_figures]:
-        feat = features.get(c.feature_name)
-        if feat is None or feat.shape != target_vol.shape:
-            continue
-        binned = binned_feature_by_target(
-            feat, target_vol, mask,
-            feature_name=c.feature_name, target_name=target_name, n_bins=10,
-        )
-        plot_feature_vs_target_scatter(
-            feat, target_vol, mask,
-            feature_name=c.feature_name, target_name=target_name,
-            save_path=fig_dir / f"{c.feature_name}_vs_{target_name}.png",
-            binned=binned,
-        )
+    if top_k_figures > 0:
+        for c in spearman_rows[:top_k_figures]:
+            feat = features.get(c.feature_name)
+            if feat is None or feat.shape != target_vol.shape:
+                continue
+            binned = binned_feature_by_target(
+                feat, target_vol, mask,
+                feature_name=c.feature_name, target_name=target_name, n_bins=10,
+            )
+            plot_feature_vs_target_scatter(
+                feat, target_vol, mask,
+                feature_name=c.feature_name, target_name=target_name,
+                save_path=fig_dir / f"{c.feature_name}_vs_{target_name}.png",
+                binned=binned,
+                spearman_rho=c.correlation,
+            )
     return result
 
 
@@ -284,9 +299,16 @@ def main(argv: list[str] | None = None) -> int:
 
     print("[run_analysis] writing figures")
     plot_halfmap_metric_histogram(
-        metrics, mask, save_path=fig_dir / "halfmap_metric_histograms.png",
+        metrics,
+        mask,
+        save_path=fig_dir / "halfmap_metric_histograms.png",
         title=f"half-map metrics inside vs outside contour {args.contour}",
+        metric_keys=HALFMAP_HISTOGRAM_QC_KEYS,
     )
+    if args.prune_scatter_figures:
+        removed = prune_analysis_scatter_figures(fig_dir)
+        if removed:
+            print(f"[run_analysis] pruned {len(removed)} retired scatter figure(s)", flush=True)
 
     if args.reliability_target in ("halfmap_cc", "both"):
         target = metrics[args.target]

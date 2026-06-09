@@ -481,9 +481,213 @@ def write_summary_text(
     return path
 
 
+# Metrics kept in the trimmed mask-QC histogram (drop redundant MSE / var-diff pair).
+HALFMAP_HISTOGRAM_QC_KEYS: tuple[str, ...] = (
+    "local_cross_correlation",
+    "local_reproducibility_snr",
+)
+
+# Anchor validation panel: two variance-family scatters + reliability binned + CC hist.
+ANALYSIS_PANEL_FEATURE_KEYS: tuple[str, ...] = (
+    "local_variance",
+    "gauss_s0_local_variance",
+)
+
+
 # ---------------------------------------------------------------------------
 # Figures (matplotlib)
 # ---------------------------------------------------------------------------
+
+
+def plot_feature_vs_target_on_ax(
+    ax,
+    feature: np.ndarray,
+    target: np.ndarray,
+    mask: np.ndarray,
+    *,
+    feature_name: str,
+    target_name: str,
+    spearman_rho: float | None = None,
+    max_points: int = 50_000,
+    binned: BinnedRelationship | None = None,
+) -> None:
+    """Hexbin + optional binned-mean curve on an existing axes (for multi-panel figures)."""
+    import matplotlib.pyplot as plt
+
+    from style.nature import apply
+
+    f = _flatten_under_mask(feature, mask)
+    t = _flatten_under_mask(target, mask)
+    finite = np.isfinite(f) & np.isfinite(t)
+    f = f[finite]
+    t = t[finite]
+    if f.size > max_points:
+        rng = np.random.default_rng(0)
+        idx = rng.choice(f.size, size=max_points, replace=False)
+        f_plot, t_plot = f[idx], t[idx]
+    else:
+        f_plot, t_plot = f, t
+
+    apply(ax)
+    hb = ax.hexbin(t_plot, f_plot, gridsize=60, mincnt=1, cmap="viridis", bins="log")
+    plt.colorbar(hb, ax=ax, label="log(count)", fraction=0.046, pad=0.02)
+    if binned is not None:
+        ax.errorbar(
+            binned.bin_centers,
+            binned.mean_feature,
+            yerr=binned.std_feature,
+            fmt="o-",
+            color="orange",
+            ecolor="orange",
+            elinewidth=1.0,
+            capsize=2.5,
+            label="binned mean ± std",
+        )
+        ax.legend(loc="best", fontsize=8)
+    rho_txt = f", ρ={spearman_rho:+.3f}" if spearman_rho is not None and np.isfinite(spearman_rho) else ""
+    ax.set_xlabel(target_name)
+    ax.set_ylabel(feature_name)
+    ax.set_title(f"{feature_name} vs {target_name}{rho_txt}\n(n={f.size:,} masked voxels)", fontsize=10)
+
+
+def plot_cc_mask_histogram_on_ax(
+    ax,
+    metrics: Mapping[str, np.ndarray],
+    mask: np.ndarray,
+    *,
+    metric_key: str = "local_cross_correlation",
+    bins: int = 80,
+) -> None:
+    """Single-metric inside vs outside mask histogram (panel inset for validation figure)."""
+    from style.nature import apply
+
+    apply(ax)
+    mask_b = np.asarray(mask).astype(bool)
+    v = np.asarray(metrics[metric_key])
+    inside = v[mask_b]
+    outside = v[~mask_b]
+    rng = np.random.default_rng(0)
+    if inside.size > 200_000:
+        inside = inside[rng.choice(inside.size, 200_000, replace=False)]
+    if outside.size > 200_000:
+        outside = outside[rng.choice(outside.size, 200_000, replace=False)]
+    inside = inside[np.isfinite(inside)]
+    outside = outside[np.isfinite(outside)]
+    ax.hist(outside, bins=bins, density=True, alpha=0.5, color="lightgray",
+            label=f"outside mask (n≈{outside.size:,})")
+    ax.hist(inside, bins=bins, density=True, alpha=0.7, color="steelblue",
+            label=f"inside mask (n≈{inside.size:,})")
+    ax.set_title(metric_key, fontsize=10)
+    ax.set_xlabel(metric_key)
+    ax.set_ylabel("density")
+    ax.legend(fontsize=7, loc="best")
+
+
+def plot_reliability_vs_cc_binned_on_ax(
+    ax,
+    reliability_score: np.ndarray,
+    cc: np.ndarray,
+    mask: np.ndarray,
+    *,
+    spearman_rho: float | None = None,
+    n_bins: int = 10,
+) -> None:
+    """Binned mean reliability_score vs half-map CC (replaces per-map orphan figure)."""
+    from style.nature import apply
+
+    binned = binned_feature_by_target(
+        reliability_score,
+        cc,
+        mask,
+        feature_name="reliability_score",
+        target_name="local_cross_correlation",
+        n_bins=n_bins,
+    )
+    apply(ax)
+    ax.errorbar(
+        binned.bin_centers,
+        binned.mean_feature,
+        yerr=binned.std_feature,
+        fmt="o-",
+        color="steelblue",
+        ecolor="steelblue",
+        elinewidth=1.0,
+        capsize=2.5,
+        label="binned mean ± std",
+    )
+    ax.legend(loc="best", fontsize=8)
+    rho_txt = f", ρ={spearman_rho:+.3f}" if spearman_rho is not None and np.isfinite(spearman_rho) else ""
+    ax.set_xlabel("half-map CC (bin center)")
+    ax.set_ylabel("mean reliability_score")
+    ax.set_title(f"reliability vs half-map agreement{rho_txt}", fontsize=10)
+
+
+def plot_analysis_validation_panel(
+    features: Mapping[str, np.ndarray],
+    metrics: Mapping[str, np.ndarray],
+    mask: np.ndarray,
+    *,
+    reliability_score: np.ndarray,
+    spearman: Mapping[str, float],
+    emd_id: str,
+    contour: float,
+    save_path: str | Path,
+    dpi: int = 200,
+) -> Path:
+    """
+    2×2 anchor figure: two variance scatters, reliability-vs-CC binned curve, CC histogram.
+
+    Written once per anchor map (default EMD-49450) after LH reliability export.
+    """
+    import matplotlib
+
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    from style.nature import label_panel, savefig as save_nature
+
+    target_name = "local_cross_correlation"
+    cc = np.asarray(metrics[target_name])
+    fig, axes = plt.subplots(2, 2, figsize=(11.0, 9.0))
+    flat = axes.ravel()
+
+    scatter_keys = [k for k in ANALYSIS_PANEL_FEATURE_KEYS if k in features]
+    for i, key in enumerate(scatter_keys[:2]):
+        feat = features[key]
+        binned = binned_feature_by_target(
+            feat, cc, mask, feature_name=key, target_name=target_name, n_bins=10,
+        )
+        plot_feature_vs_target_on_ax(
+            flat[i],
+            feat,
+            cc,
+            mask,
+            feature_name=key,
+            target_name=target_name,
+            spearman_rho=float(spearman.get(key, float("nan"))),
+            binned=binned,
+        )
+        label_panel(flat[i], chr(ord("a") + i))
+
+    plot_reliability_vs_cc_binned_on_ax(
+        flat[2],
+        reliability_score,
+        cc,
+        mask,
+        spearman_rho=float(spearman.get("reliability_score", float("nan"))),
+    )
+    label_panel(flat[2], "c")
+
+    plot_cc_mask_histogram_on_ax(flat[3], metrics, mask)
+    label_panel(flat[3], "d")
+
+    fig.suptitle(f"EMD-{emd_id} feature vs half-map CC (mask ρ≥{contour})", fontsize=12)
+    fig.tight_layout(rect=(0, 0, 1, 0.96))
+    save_path = Path(save_path)
+    save_path.parent.mkdir(parents=True, exist_ok=True)
+    save_nature(fig, save_path, dpi=dpi)
+    plt.close(fig)
+    return save_path
 
 
 def plot_halfmap_metric_histogram(
@@ -566,6 +770,7 @@ def plot_feature_vs_target_scatter(
     save_path: str | Path,
     max_points: int = 50_000,
     binned: BinnedRelationship | None = None,
+    spearman_rho: float | None = None,
 ) -> Path:
     """
     Hexbin (or scatter) of feature vs target inside the mask, with the binned
@@ -577,41 +782,20 @@ def plot_feature_vs_target_scatter(
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
 
-    from style.nature import apply, savefig as save_nature
-
-    f = _flatten_under_mask(feature, mask)
-    t = _flatten_under_mask(target, mask)
-    finite = np.isfinite(f) & np.isfinite(t)
-    f = f[finite]
-    t = t[finite]
-    if f.size > max_points:
-        rng = np.random.default_rng(0)
-        idx = rng.choice(f.size, size=max_points, replace=False)
-        f_plot, t_plot = f[idx], t[idx]
-    else:
-        f_plot, t_plot = f, t
+    from style.nature import savefig as save_nature
 
     fig, ax = plt.subplots(figsize=(6.0, 5.0))
-    apply(ax)
-    hb = ax.hexbin(t_plot, f_plot, gridsize=60, mincnt=1, cmap="viridis", bins="log")
-    fig.colorbar(hb, ax=ax, label="log(count)")
-    if binned is not None:
-        # Overlay binned-mean curve with std error bars.
-        ax.errorbar(
-            binned.bin_centers,
-            binned.mean_feature,
-            yerr=binned.std_feature,
-            fmt="o-",
-            color="orange",
-            ecolor="orange",
-            elinewidth=1.0,
-            capsize=2.5,
-            label="binned mean ± std",
-        )
-        ax.legend(loc="best", fontsize=9)
-    ax.set_xlabel(target_name)
-    ax.set_ylabel(feature_name)
-    ax.set_title(f"{feature_name} vs {target_name}  (n={f.size:,} masked voxels)")
+    plot_feature_vs_target_on_ax(
+        ax,
+        feature,
+        target,
+        mask,
+        feature_name=feature_name,
+        target_name=target_name,
+        spearman_rho=spearman_rho,
+        max_points=max_points,
+        binned=binned,
+    )
     fig.tight_layout()
     save_path = Path(save_path)
     save_path.parent.mkdir(parents=True, exist_ok=True)
@@ -621,14 +805,18 @@ def plot_feature_vs_target_scatter(
 
 
 __all__ = [
+    "ANALYSIS_PANEL_FEATURE_KEYS",
     "BinnedRelationship",
     "FeatureCorrelation",
+    "HALFMAP_HISTOGRAM_QC_KEYS",
     "MaskedAnalysisResult",
     "binned_feature_by_target",
     "build_contour_mask",
     "compute_feature_target_correlations",
     "half_map_local_metrics_chunked",
     "half_map_local_metrics_chunked_bbox",
+    "plot_analysis_validation_panel",
+    "plot_feature_vs_target_on_ax",
     "plot_feature_vs_target_scatter",
     "plot_halfmap_metric_histogram",
     "write_correlation_csv",
