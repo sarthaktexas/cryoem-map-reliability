@@ -14,6 +14,8 @@ All volumes use NumPy 3D arrays in `(Z, Y, X)` order (section, row, column), con
 uv pip install -e .
 # or:
 pip install -e .
+# from GitHub (no PyPI upload yet):
+pip install "git+https://github.com/sarthaktexas/cryoem-halfmap-qc.git@v0.1.0"
 ```
 
 **Dependencies:** NumPy, SciPy, mrcfile, Matplotlib, gemmi (mmCIF/PDB for residue-level validation).

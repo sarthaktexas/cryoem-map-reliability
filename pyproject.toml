@@ -3,9 +3,9 @@ requires = ["setuptools>=61"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "cryoem-mrc-pipeline"
+name = "cryoem-halfmap-qc"
 version = "0.1.0"
-description = "Cryo-EM MRC density feature extraction"
+description = "Local map reliability from cryo-EM density and half-maps"
 readme = "README.md"
 license = "MIT"
 requires-python = ">=3.10"

@@ -12,7 +12,7 @@ repository-code: "https://github.com/sarthaktexas/cryoem-halfmap-qc"
 url: "https://github.com/sarthaktexas/cryoem-halfmap-qc"
 license: MIT
 version: 0.1.0
-date-released: "2026-06-07"
+date-released: "2026-06-09"
 keywords:
   - cryo-electron-microscopy
   - map quality
