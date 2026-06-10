@@ -17,7 +17,7 @@ uv pip install -e .
 # or:
 pip install -e .
 # from GitHub (no PyPI upload yet):
-pip install "git+https://github.com/sarthaktexas/cryoem-halfmap-qc.git@v0.1.0"
+pip install "git+https://github.com/sarthaktexas/cryoem-halfmap-qc.git@v0.2.0"
 ```
 
 **Dependencies:** NumPy, SciPy, mrcfile, Matplotlib, gemmi (mmCIF/PDB for residue-level validation).
@@ -151,7 +151,7 @@ python -m unittest discover -s tests -v
 
 ## Citation
 
-**Before the manuscript is published**, cite the software with the Zenodo concept DOI (resolves to the latest release; pin `v0.1.0` or a commit hash for exact reproducibility):
+**Before the manuscript is published**, cite the software with the Zenodo concept DOI (resolves to the latest release; pin `v0.2.0` or a commit hash for exact reproducibility):
 
 ```bibtex
 @software{mohanty2026cryoem_halfmap_qc,
@@ -160,7 +160,7 @@ python -m unittest discover -s tests -v
   year = {2026},
   doi = {10.5281/zenodo.20618527},
   url = {https://doi.org/10.5281/zenodo.20618527},
-  version = {0.1.0}
+  version = {0.2.0}
 }
 ```
 
