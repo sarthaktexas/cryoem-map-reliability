@@ -71,7 +71,7 @@
       "gap": "AAA+ / proteasome assembly",
       "pdb_id": null,
       "contour": null,
-      "flexibility_source": "halfmap_cc_only",
+      "flexibility_source": "windowed_halfmap_correlation_only",
       "software": "RELION",
       "resolution_A": 2.8,
       "notes": "T20S proteasome; no fitted PDB on EMDB \u2014 CC-only validation"
@@ -131,7 +131,7 @@
       "gap": "Low-res / large assembly",
       "pdb_id": null,
       "contour": 0.4,
-      "flexibility_source": "halfmap_cc_only",
+      "flexibility_source": "windowed_halfmap_correlation_only",
       "software": "unknown",
       "resolution_A": 5.4,
       "notes": "70S from EMPIAR-10499; no PDB \u2014 CC-only; complements EMD-45261"

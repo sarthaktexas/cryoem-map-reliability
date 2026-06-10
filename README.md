@@ -86,7 +86,7 @@ python scripts/run_cohort_pipeline.py
 
 | Script                                             | Purpose                                                  |
 | -------------------------------------------------- | -------------------------------------------------------- |
-| `scripts/run_analysis.py`                          | Feature vs half-map CC (+ optional local FSC map)        |
+| `scripts/run_analysis.py`                          | Feature vs windowed half-map correlation (+ local FSC) |
 | `scripts/run_local_fsc.py`                         | Windowed local FSC → Å MRC                               |
 | `scripts/run_lh_map_reliability_export.py`         | H_repro, reliability score, build zones, summary figures |
 | `scripts/run_extended_feature_validation.py`       | Extended stats, Hessian, ridge CV vs CC                  |
@@ -113,7 +113,7 @@ bundle = load_full_and_half_maps(
     "full.mrc", "half1.mrc", "half2.mrc", dtype=np.float32, resample_if_needed=True
 )
 metrics = half_map_local_metrics(bundle.half1, bundle.half2, window=5)
-# metrics["local_cross_correlation"], etc.
+# metrics["windowed_halfmap_correlation"], etc.
 
 features = run_pipeline("map.mrc", use_float32=True)
 reliability = compute_reliability_maps(
@@ -130,12 +130,14 @@ zones = classify_build_zones(reliability["reliability_score"])
 
 ## Methods summary
 
-- **Half-map CC** (windowed cross-correlation) is the primary reproducibility target for feature validation.
+- **Windowed half-map correlation** is the fast internal reproducibility target for feature validation; **local FSC resolution (Å)** is the field-standard reference.
 - **Local FSC** is computed in-repo (`cryoem_mrc.local_fsc`); external BlocRes / ResMap / MonoRes maps are not loaded.
 - **H_repro** combines windowed half-map fluctuation (T) and density gradient smoothness (V); **reliability_score** is an in-mask percentile used for build/caution/omit terciles.
-- **Local variance** is often the strongest single feature predictor of half-map CC; treat B-factor correlations as exploratory and report partial correlations when comparing scores.
+- **Local variance** is often the strongest single feature predictor of windowed half-map correlation; treat B-factor correlations as exploratory and report partial correlations when comparing scores.
 
 Design choices and parameter defaults are recorded in [DECISIONS.md](DECISIONS.md).
+
+**Thesis prose:** full narrative draft in [docs/THESIS_NARRATIVE.md](docs/THESIS_NARRATIVE.md). Writing guide and defense notes in [docs/THESIS_AND_PUBLICATION.md](docs/THESIS_AND_PUBLICATION.md).
 
 ---
 

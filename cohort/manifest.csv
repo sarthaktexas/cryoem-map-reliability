@@ -24,7 +24,7 @@ emdb_id,display_name,half1_path,half2_path,reference_mrc,contour,flexibility_sou
 
 52525,Complex III (mitochondrial),data/emd_52525-complexIII_mito/emd_52525_half_map_1.map,data/emd_52525-complexIII_mito/emd_52525_half_map_2.map,data/emd_52525-complexIII_mito/emd_52525.map,4.54,b_factor,pdb/9hzl.cif,maps+PDB local; LH+B-factor validated,6,2.52
 
-52515,UBR4-KCMF1 (N-terminal),data/emd_52515-ubr4_kcmf1_nterm/emd_52515_half_map_1.map,data/emd_52515-ubr4_kcmf1_nterm/emd_52515_half_map_2.map,data/emd_52515-ubr4_kcmf1_nterm/emd_52515.map,0.0045,halfmap_cc_only,,maps local; no PDB; CC-only validation (low res),TBD,5.70
+52515,UBR4-KCMF1 (N-terminal),data/emd_52515-ubr4_kcmf1_nterm/emd_52515_half_map_1.map,data/emd_52515-ubr4_kcmf1_nterm/emd_52515_half_map_2.map,data/emd_52515-ubr4_kcmf1_nterm/emd_52515.map,0.0045,windowed_halfmap_correlation_only,,maps local; no PDB; CC-only validation (low res),TBD,5.70
 
 30207,Beta-galactosidase+PEG v1 (excluded),data/emd_30207/emd_30207_half_map_1.map,data/emd_30207/emd_30207_half_map_2.map,data/emd_30207/emd_30207.map,TBD,excluded,,SKIP: beta-gal PEGylation; no half maps on EMDB,TBD,3.10
 
@@ -68,7 +68,7 @@ emdb_id,display_name,half1_path,half2_path,reference_mrc,contour,flexibility_sou
 
 42603,Human p97/VCP + inhibitor,data/emd_42603-p97_vcp/emd_42603_half_map_1.map,data/emd_42603-p97_vcp/emd_42603_half_map_2.map,data/emd_42603-p97_vcp/emd_42603.map,0.33,b_factor,pdb/8uv2.cif,maps+PDB local; LH+B-factor validated,TBD,3.23
 
-6287,T20S proteasome,data/emd_6287-proteasome_t20s/emd_6287_half_map_1.map,data/emd_6287-proteasome_t20s/emd_6287_half_map_2.map,data/emd_6287-proteasome_t20s/emd_6287.map,0.025,halfmap_cc_only,,maps local; no PDB on EMDB; CC-only,TBD,2.80
+6287,T20S proteasome,data/emd_6287-proteasome_t20s/emd_6287_half_map_1.map,data/emd_6287-proteasome_t20s/emd_6287_half_map_2.map,data/emd_6287-proteasome_t20s/emd_6287.map,0.025,windowed_halfmap_correlation_only,,maps local; no PDB on EMDB; CC-only,TBD,2.80
 
 44471,Human nucleosome 3.0 A,data/emd_44471-nucleosome_3A/emd_44471_half_map_1.map,data/emd_44471-nucleosome_3A/emd_44471_half_map_2.map,data/emd_44471-nucleosome_3A/emd_44471.map,0.855,b_factor,pdb/9be6.cif,maps+PDB local; LH+B-factor validated,TBD,3.00
 
@@ -78,7 +78,7 @@ emdb_id,display_name,half1_path,half2_path,reference_mrc,contour,flexibility_sou
 
 62841,Thermophile spliceosome ILS,data/emd_62841-spliceosome_ils/emd_62841_half_map_1.map,data/emd_62841-spliceosome_ils/emd_62841_half_map_2.map,data/emd_62841-spliceosome_ils/emd_62841.map,0.005,b_factor,pdb/9l5r.cif,maps+PDB local; LH+B-factor validated,TBD,2.80
 
-45266,70S ribosome (EMPIAR-10499),data/emd_45266-70s_ribosome_empiar/emd_45266_half_map_1.map,data/emd_45266-70s_ribosome_empiar/emd_45266_half_map_2.map,data/emd_45266-70s_ribosome_empiar/emd_45266.map,0.4,halfmap_cc_only,,maps local; no PDB; complements 45261; CC-only,TBD,5.40
+45266,70S ribosome (EMPIAR-10499),data/emd_45266-70s_ribosome_empiar/emd_45266_half_map_1.map,data/emd_45266-70s_ribosome_empiar/emd_45266_half_map_2.map,data/emd_45266-70s_ribosome_empiar/emd_45266.map,0.4,windowed_halfmap_correlation_only,,maps local; no PDB; complements 45261; CC-only,TBD,5.40
 
 7130,Epithelial Na+ channel (ENaC),data/emd_7130-enac/emd_7130_half_map_1.map,data/emd_7130-enac/emd_7130_half_map_2.map,data/emd_7130-enac/emd_7130.map,2.8,b_factor,pdb/6bqn.cif,maps+PDB local; LH+B-factor validated,TBD,3.90
 
