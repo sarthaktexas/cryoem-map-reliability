@@ -45,6 +45,7 @@ from cryoem_mrc.analysis import build_contour_mask
 from cryoem_mrc.io import load_mrc, save_volume_like_reference
 from cryoem_mrc.local_resolution import aggregate_locres_to_ca
 from cryoem_mrc.metric_comparison import load_all_metrics
+from cryoem_mrc.model_map import generate_gaussian_model_map
 from cryoem_mrc.repo_paths import (
     ANCHOR_EMDB_ID,
     BFACTOR_VALIDATION_EMDB_IDS,
@@ -68,6 +69,15 @@ def _xmipp_cmd(program: str, args: list[str]) -> list[str]:
     """Build a command list for an Xmipp program honouring ``XMIPP_RUN``."""
     prefix = shlex.split(XMIPP_RUN) if XMIPP_RUN else []
     return [*prefix, program, *args]
+
+
+def _xmipp_available() -> bool:
+    """True when ``xmipp_volume_from_pdb`` can be launched."""
+    import shutil
+
+    if XMIPP_RUN:
+        return shutil.which(shlex.split(XMIPP_RUN)[0]) is not None
+    return shutil.which("xmipp_volume_from_pdb") is not None
 
 
 def _run(cmd: list[str], *, label: str) -> None:
@@ -105,13 +115,30 @@ def _shape(path: Path) -> tuple[int, int, int]:
         return int(h.nz), int(h.ny), int(h.nx)
 
 
-def _generate_model_map(pdb_path: Path, reference: Path, out_mrc: Path, *, voxel_a: float) -> Path:
+def _generate_model_map(
+    pdb_path: Path,
+    reference: Path,
+    out_mrc: Path,
+    *,
+    voxel_a: float,
+    resolution_a: float,
+    backend: str,
+) -> Path:
     """Render the fitted model to a density map on the reference grid via Xmipp.
 
     Uses electron scattering form factors (``xmipp_volume_from_pdb`` default). The PDB
     is taken in the deposited (map) frame — no re-centering — then the result is
     reheadered onto the reference grid so it index-aligns with the experimental map.
     """
+    if backend == "gemmi":
+        return generate_gaussian_model_map(
+            pdb_path,
+            reference,
+            out_mrc,
+            sigma_scale_resolution=0.25,
+            global_resolution_a=resolution_a,
+        )
+
     out_dir = out_mrc.parent
     nz, ny, nx = _shape(reference)
     vol_root = out_dir / "model_vol"
@@ -199,6 +226,7 @@ def run_one(
     box_override: int | None,
     force: bool,
     compute_only: bool = False,
+    model_backend: str = "auto",
 ) -> tuple[int, dict | None]:
     emd_id = str(emd_id).strip()
     row = load_cohort_manifest_row(manifest, emd_id)
@@ -234,7 +262,18 @@ def run_one(
         mask_mrc = out_dir / "fscq_mask.mrc"
         save_volume_like_reference(reference, mask_arr, mask_mrc, extra_label=f"contour mask >= {contour:g}")
 
-        model_mrc = _generate_model_map(pdb, reference, out_dir / "model_map.mrc", voxel_a=voxel_a)
+        backend = model_backend
+        if backend == "auto":
+            backend = "xmipp" if _xmipp_available() else "gemmi"
+        print(f"[fscq] EMD-{emd_id}: model-map backend = {backend}", flush=True)
+        model_mrc = _generate_model_map(
+            pdb,
+            reference,
+            out_dir / "model_map.mrc",
+            voxel_a=voxel_a,
+            resolution_a=resolution,
+            backend=backend,
+        )
 
         cc = _masked_cc(ref_rho, load_mrc(model_mrc, dtype=np.float32), mask_arr)
         print(f"[fscq] EMD-{emd_id}: model-vs-map CC in mask = {cc:.3f} (box={box}, res={resolution} Å)", flush=True)
@@ -253,7 +292,12 @@ def run_one(
         a = load_mrc(v_map_model, dtype=np.float32)
         b = load_mrc(v_half, dtype=np.float32)
         fscq = np.where(mask_arr > 0, a - b, np.nan).astype(np.float32)
-        save_volume_like_reference(reference, np.nan_to_num(fscq, nan=0.0), fscq_mrc, extra_label="FSC-Q = V_map_model - V_half (Å)")
+        save_volume_like_reference(
+            reference,
+            np.nan_to_num(fscq, nan=0.0),
+            fscq_mrc,
+            extra_label="FSC-Q = V_map_model - V_half (A)",
+        )
 
     if compute_only:
         # Cluster path: BlocRes volume written; defer Cα/V correlation to a local run
@@ -271,6 +315,11 @@ def run_one(
 
     rho_v, n_v = _spearman(use["fscq_mean"].to_numpy(float), use["v_metric"].to_numpy(float))
     rho_b, n_b = _spearman(use["fscq_mean"].to_numpy(float), use["b_factor"].to_numpy(float))
+    rho_var, n_var = float("nan"), 0
+    if "local_variance" in use.columns:
+        rho_var, n_var = _spearman(
+            use["fscq_mean"].to_numpy(float), use["local_variance"].to_numpy(float)
+        )
 
     merged.to_csv(out_dir / "residue_fscq.csv", index=False)
     stats_payload = {
@@ -280,12 +329,15 @@ def run_one(
         "n_fscq_vs_V": n_v,
         "spearman_fscq_vs_b": rho_b,
         "n_fscq_vs_b": n_b,
+        "spearman_fscq_vs_variance": rho_var,
+        "n_fscq_vs_variance": n_var,
         "fscq_median_A": float(np.nanmedian(use["fscq_mean"].to_numpy(float))),
     }
     (out_dir / "fscq_stats.json").write_text(json.dumps(stats_payload, indent=2) + "\n")
     print(
         f"[fscq] EMD-{emd_id}: ρ(FSC-Q, V)={rho_v:+.3f} (n={n_v}), "
-        f"ρ(FSC-Q, B)={rho_b:+.3f} → {out_dir/'fscq_stats.json'}",
+        f"ρ(FSC-Q, B)={rho_b:+.3f}, ρ(FSC-Q, var)={rho_var:+.3f} "
+        f"→ {out_dir/'fscq_stats.json'}",
         flush=True,
     )
     return 0, stats_payload
@@ -384,6 +436,12 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     p.add_argument("--cohort-summary", action="store_true", help="Write outputs/cohort_summary/fscq_correlations.csv")
     p.add_argument("--cohort-figure", action="store_true", help="Build fscq_vs_V_cohort.png from fscq_correlations.csv")
     p.add_argument("--dpi", type=int, default=150)
+    p.add_argument(
+        "--model-backend",
+        choices=("auto", "xmipp", "gemmi"),
+        default="auto",
+        help="Model-map generator (default auto: xmipp if on PATH, else gemmi Gaussians)",
+    )
     return p.parse_args(argv)
 
 
@@ -413,6 +471,7 @@ def main(argv: list[str] | None = None) -> int:
                 box_override=args.box,
                 force=args.force,
                 compute_only=args.compute_only,
+                model_backend=args.model_backend,
             )
         except (RuntimeError, FileNotFoundError, ValueError) as exc:
             print(f"[fscq] FAIL EMD-{emd_id}: {exc}", file=sys.stderr)
