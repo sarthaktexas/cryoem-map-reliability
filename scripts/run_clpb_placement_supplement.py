@@ -19,7 +19,7 @@ import sys
 from pathlib import Path
 
 from cryoem_mrc.placement_supplement import plot_placement_supplement
-from cryoem_mrc.repo_paths import COHORT_MANIFEST, OUTPUTS_ROOT
+from cryoem_mrc.repo_paths import COHORT_MANIFEST, OUTPUTS_ROOT, sync_thesis_doc_figure
 from cryoem_mrc.structure_validation import (
     default_reliability_out_dir,
     load_cohort_manifest_row,
@@ -102,6 +102,7 @@ def main(argv: list[str] | None = None) -> int:
         pdf_src = out_path.with_suffix(".pdf")
         if pdf_src.is_file():
             shutil.copy2(pdf_src, args.cohort_copy.with_suffix(".pdf"))
+        sync_thesis_doc_figure(args.cohort_copy, "fig_s4_clpb_wt2a_placement_supplement.png")
 
     stats_path = out_dir / f"{stem}_stats.json"
     stats_path.write_text(json.dumps(stats, indent=2) + "\n")

@@ -29,7 +29,7 @@ import numpy as np
 from style.nature import PALETTES, apply, savefig as save_nature
 
 from cryoem_mrc.placement_supplement import plot_placement_supplement
-from cryoem_mrc.repo_paths import COHORT_MANIFEST, OUTPUTS_ROOT
+from cryoem_mrc.repo_paths import COHORT_MANIFEST, OUTPUTS_ROOT, sync_thesis_doc_figure
 from cryoem_mrc.structure_validation import (
     compute_model_placement_audit_stats,
     default_reliability_out_dir,
@@ -49,7 +49,7 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         "--cc-threshold",
         type=float,
         default=0.5,
-        help="Absolute local half-map CC cutoff for questionable placement (default 0.5)",
+        help="Absolute windowed half-map correlation cutoff for questionable placement (default 0.5)",
     )
     p.add_argument(
         "--reliability-threshold",
@@ -393,21 +393,25 @@ def main(argv: list[str] | None = None) -> int:
     args.out_dir.mkdir(parents=True, exist_ok=True)
     csv_path = args.out_dir / "model_placement_audit.csv"
     write_model_placement_audit_csv(csv_path, stats_rows)
+    tercile_png = args.out_dir / "model_placement_tercile_vs_absolute.png"
+    absolute_png = args.out_dir / "model_placement_absolute_vs_absolute.png"
     _plot_tercile_vs_absolute(
         stats_rows,
-        out_path=args.out_dir / "model_placement_tercile_vs_absolute.png",
+        out_path=tercile_png,
         cc_threshold=args.cc_threshold,
         disagreement_min=args.highlight_disagreement_min,
         dpi=args.dpi,
     )
     _plot_absolute_vs_absolute(
         stats_rows,
-        out_path=args.out_dir / "model_placement_absolute_vs_absolute.png",
+        out_path=absolute_png,
         cc_threshold=args.cc_threshold,
         reliability_threshold=args.reliability_threshold,
         disagreement_min=args.highlight_disagreement_min,
         dpi=args.dpi,
     )
+    sync_thesis_doc_figure(tercile_png, "fig_3_6_model_placement_tercile_vs_absolute.png")
+    sync_thesis_doc_figure(absolute_png, "fig_3_6_model_placement_absolute_vs_absolute.png")
     print(f"[model_placement] wrote {csv_path}", flush=True)
 
     if not args.no_wt2a_supplement and any(s.emdb_id == "4941" for s in stats_rows):
@@ -457,6 +461,7 @@ def _write_wt2a_supplement(
     pdf_src = out_path.with_suffix(".pdf")
     if pdf_src.is_file():
         shutil.copy2(pdf_src, cohort_copy.with_suffix(".pdf"))
+    sync_thesis_doc_figure(cohort_copy, "fig_s4_clpb_wt2a_placement_supplement.png")
     print(f"[model_placement] wrote {out_path}", flush=True)
     print(f"[model_placement] wrote {cohort_copy}", flush=True)
 
