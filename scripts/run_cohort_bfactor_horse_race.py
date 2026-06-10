@@ -28,6 +28,7 @@ from scipy import stats
 from style.nature import PALETTES, apply, label_panel, savefig as save_nature
 
 from cryoem_mrc.analysis import build_contour_mask
+from cryoem_mrc.half_map_repro import load_windowed_halfmap_correlation
 from cryoem_mrc.repo_paths import COHORT_MANIFEST, OUTPUTS_ROOT, halfmap_metrics_npz, lh_map_reliability_dir
 from cryoem_mrc.structure_validation import (
     _partial_spearman,
@@ -83,7 +84,7 @@ def _horse_race_one(emd_id: str, *, manifest: Path, sphere_radius_a: float) -> d
     cc_path = halfmap_metrics_npz(emd_id)
     if cc_path.is_file():
         with np.load(cc_path, allow_pickle=False) as hm:
-            cc = np.asarray(hm["local_cross_correlation"], dtype=np.float32)
+            cc = load_windowed_halfmap_correlation(hm)
 
     residues = iter_ca_residues(pdb_path)
     b = np.array([r.b_iso for r in residues], dtype=np.float64)

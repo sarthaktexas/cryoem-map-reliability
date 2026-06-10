@@ -31,6 +31,10 @@ import numpy as np
 from style.nature import apply, label_panel, savefig as save_nature
 
 from cryoem_mrc.analysis import build_contour_mask
+from cryoem_mrc.half_map_repro import (
+    WINDOWED_HALFMAP_CORRELATION_LABEL,
+    load_windowed_halfmap_correlation,
+)
 from cryoem_mrc.io import load_mrc
 from cryoem_mrc.local_resolution_io import load_local_resolution_map
 from cryoem_mrc.map_grid import load_map_grid
@@ -321,7 +325,7 @@ def main(argv: list[str] | None = None) -> int:
         saved.append(dest)
         print(f"[thesis_figures] wrote {dest.name}")
 
-    # --- local FSC + half-map CC (load once, used by several jobs) ---
+    # --- local FSC + windowed half-map correlation (load once, used by several jobs) ---
     need_cc_res = any(
         _should_run(j, _fig_export(out_dir, j), skip_existing=args.skip_existing, only=only)
         for j in (
@@ -337,16 +341,19 @@ def main(argv: list[str] | None = None) -> int:
     if need_cc_res:
         print(f"[thesis_figures] loading local resolution {paths['local_res'].name}")
         local_res = np.asarray(load_local_resolution_map(paths["local_res"]).data, dtype=np.float32)
-        print("[thesis_figures] loading half-map CC from NPZ")
+        print("[thesis_figures] loading windowed half-map correlation from NPZ")
         with np.load(paths["halfmap_npz"], allow_pickle=False) as hm:
-            local_cc = np.asarray(hm["local_cross_correlation"], dtype=np.float32)
+            local_cc = load_windowed_halfmap_correlation(hm)
         if local_cc.shape != mask.shape:
             print(
                 f"[thesis_figures] ERROR: halfmap shape {local_cc.shape} != mask {mask.shape}",
                 file=sys.stderr,
             )
             return 2
-        print("[thesis_figures] applying contour mask to local resolution and half-map CC volumes")
+        print(
+            "[thesis_figures] applying contour mask to local resolution and "
+            "windowed half-map correlation volumes"
+        )
         local_res = apply_contour_mask(local_res, mask)
         local_cc = apply_contour_mask(local_cc, mask)
 
@@ -551,7 +558,7 @@ def main(argv: list[str] | None = None) -> int:
         if local_cc is None:
             with np.load(paths["halfmap_npz"], allow_pickle=False) as hm:
                 local_cc = apply_contour_mask(
-                    np.asarray(hm["local_cross_correlation"], dtype=np.float32),
+                    load_windowed_halfmap_correlation(hm),
                     mask,
                 )
         if local_res is None:
@@ -582,7 +589,7 @@ def main(argv: list[str] | None = None) -> int:
             (
                 extract_slice(local_cc, axis=0, index=z),
                 RELIABILITY_CMAP_CC,
-                "half-map CC",
+                WINDOWED_HALFMAP_CORRELATION_LABEL,
                 CC_CBAR_LABEL,
                 {"vmin": 0.0, "vmax": 1.0, "robust": False},
             ),

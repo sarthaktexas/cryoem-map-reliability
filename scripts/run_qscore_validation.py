@@ -35,11 +35,17 @@ from cryoem_mrc.qscore_validation import (
     QscoreValidationStats,
     run_emdb_qscore_validation,
 )
-from cryoem_mrc.repo_paths import ANCHOR_EMDB_ID, BFACTOR_VALIDATION_EMDB_IDS, COHORT_MANIFEST, OUTPUTS_ROOT
+from cryoem_mrc.repo_paths import (
+    ANCHOR_EMDB_ID,
+    BFACTOR_VALIDATION_EMDB_IDS,
+    COHORT_MANIFEST,
+    OUTPUTS_ROOT,
+    sync_thesis_doc_figure,
+)
 
 # Omit from cohort ρ figure / headline stats (degenerate V or no Cα anchor).
-# See outputs/cohort_summary/QSCORE_COHORT_SUMMARY.md Finding 2.
-QSCORE_PANEL_EXCLUDE = frozenset({"33736", "52525"})
+# RNA-only EMD-33736: zero protein Cα; see docs/THESIS_AND_PUBLICATION.md §3.4.
+QSCORE_PANEL_EXCLUDE = frozenset({"33736"})
 
 def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -238,6 +244,7 @@ def _build_cohort_figure(manifest: Path, dpi: int) -> Path | None:
     out = OUTPUTS_ROOT / "cohort_summary" / "qscore_vs_V_cohort"
     save_nature(fig, out, dpi=dpi)
     plt.close(fig)
+    sync_thesis_doc_figure(out.with_suffix(".png"), "fig_3_4_qscore_vs_V_cohort.png")
     print(f"[qscore_validation] cohort figure → {out}.png", flush=True)
     return out
 

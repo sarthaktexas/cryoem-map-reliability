@@ -25,6 +25,8 @@ import numpy as np
 
 from cryoem_mrc.conformation_pair import (
     compute_conformation_pair_coverage,
+    get_domain_assignments,
+    get_domain_regions_for_pair,
     kabsch_align_coords,
 )
 from cryoem_mrc.repo_paths import COHORT_MANIFEST, bfactor_conformation_pairs_dir
@@ -42,6 +44,8 @@ from cryoem_mrc.thesis_figures import (
     DEFAULT_CLUSTER_SEPARATION_THRESHOLD,
     compute_conformation_coupling,
     compute_coupling_cluster_separation_score,
+    compute_domain_coupling_block_colors,
+    plot_conformation_pair_delta_reliability_supplement,
     plot_conformation_pair_domain_coupling_supplement,
     plot_conformation_pair_summary_triptych,
 )
@@ -155,6 +159,36 @@ def main(argv: list[str] | None = None) -> int:
             coords_b = np.array([[b.x, b.y, b.z] for _, b in use_full], dtype=np.float64)
             coords_b_aligned, _ = kabsch_align_coords(coords_b, coords_a)
 
+            has_domains = bool(get_domain_regions_for_pair(args.emd_a, args.emd_b))
+            summary_name = (
+                "conformation_pair_summary.png"
+                if has_domains
+                else "conformation_pair_summary_triptych.png"
+            )
+
+            chimerax_domain_png = None
+            chimerax_coupling_png = None
+            if has_domains:
+                from cryoem_mrc.chimerax_figures import (
+                    chimerax_render_png,
+                    render_chimerax_domain_colored_surface,
+                )
+
+                chimerax_domain_png = chimerax_render_png(args.emd_a, "domain")
+                regions = get_domain_regions_for_pair(args.emd_a, args.emd_b)
+                domain_order = [reg.name for reg in regions]
+                use_int = coupling_data["interior_use"]
+                assignments = get_domain_assignments(use_int, regions)
+                block_hex, _ = compute_domain_coupling_block_colors(
+                    coupling_data["interior_corr"], assignments, domain_order
+                )
+                chimerax_coupling_png = render_chimerax_domain_colored_surface(
+                    args.emd_a,
+                    domain_colors=block_hex,
+                    out_png=out_dir / f"chimerax_emd_{args.emd_a}_domain_coupling.png",
+                    preview=True,
+                )
+
             triptych, recommended_layout = plot_conformation_pair_summary_triptych(
                 pairs,
                 emdb_a=args.emd_a,
@@ -167,11 +201,28 @@ def main(argv: list[str] | None = None) -> int:
                 cluster_separation_threshold=cluster_threshold,
                 layout=args.layout,
                 manifest=args.manifest,
-                save_path=out_dir / "conformation_pair_summary_triptych.png",
+                include_structure_panel=has_domains,
+                chimerax_domain_png=chimerax_domain_png,
+                chimerax_coupling_png=chimerax_coupling_png,
+                save_path=out_dir / summary_name,
                 dpi=args.dpi,
             )
             if triptych is not None:
                 plt.close(triptych)
+
+            if has_domains:
+                delta_supp = plot_conformation_pair_delta_reliability_supplement(
+                    pairs,
+                    emdb_a=args.emd_a,
+                    emdb_b=args.emd_b,
+                    in_mask_both=True,
+                    coverage_note=cov_note,
+                    manifest=args.manifest,
+                    save_path=out_dir / "conformation_pair_delta_reliability_supplement.png",
+                    dpi=args.dpi,
+                )
+                if delta_supp is not None:
+                    plt.close(delta_supp)
 
             supplement = plot_conformation_pair_domain_coupling_supplement(
                 pairs,
@@ -214,7 +265,8 @@ def main(argv: list[str] | None = None) -> int:
 
     flag = " [COVERAGE FLAG]" if coverage.coverage_flag else ""
     layout_txt = (
-        f" main=cluster_matrix recommended={recommended_layout} block_score={cluster_sep_score:+.3f}"
+        f" main=cluster_matrix recommended={recommended_layout} "
+        f"coupling_block_score={cluster_sep_score:+.3f}"
         if len(use) >= 10
         else ""
     )

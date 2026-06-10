@@ -22,7 +22,7 @@ matplotlib.use("Agg")
 
 import style.nature  # noqa: F401 — apply Nature rcParams before thesis figure imports
 
-from cryoem_mrc.repo_paths import OUTPUTS_ROOT
+from cryoem_mrc.repo_paths import OUTPUTS_ROOT, sync_thesis_narrative_cohort_figures
 from cryoem_mrc.thesis_figures import (
     collect_cohort_metrics,
     plot_cohort_metrics_heatmap,
@@ -126,7 +126,10 @@ def main(argv: list[str] | None = None) -> int:
         plot_fn()
         written.append(name)
 
+    synced = sync_thesis_narrative_cohort_figures(args.out_dir)
     print(f"[cohort_summary] {len(rows)} maps -> {', '.join(written)}", flush=True)
+    if synced:
+        print(f"[cohort_summary] synced {len(synced)} thesis figures -> docs/figures/", flush=True)
     return 0
 
 
