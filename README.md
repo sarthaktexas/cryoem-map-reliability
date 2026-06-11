@@ -90,7 +90,6 @@ python scripts/run_cohort_pipeline.py
 | `scripts/run_local_fsc.py`                         | Windowed local FSC → Å MRC                               |
 | `scripts/run_lh_map_reliability_export.py`         | H_repro, reliability score, build zones, summary figures |
 | `scripts/run_extended_feature_validation.py`       | Extended stats, Hessian, ridge CV vs CC                  |
-| `scripts/run_lh_vs_b_and_fsc.py`                   | Reliability metrics vs B-factors, CC, local FSC          |
 | `scripts/run_residue_bfactor_validation.py`        | Cα B_iso vs reliability / build zones                    |
 | `scripts/run_residue_bfactor_score_correlation.py` | B vs multiple map scores (sphere sampling)               |
 | `scripts/run_residue_bfactor_conformation_pair.py` | ΔB vs Δreliability across two EMDB states                |
