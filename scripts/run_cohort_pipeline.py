@@ -26,7 +26,6 @@ from cryoem_mrc.map_grid import load_full_and_half_maps
 from cryoem_mrc.repo_paths import COHORT_MANIFEST, analysis_dir, lh_map_reliability_dir
 
 REPO = Path(__file__).resolve().parents[1]
-DONE_IDS = frozenset({"49450", "11638", "23129"})
 SKIP_SOURCES = frozenset({"excluded", "optional"})
 
 
@@ -77,8 +76,6 @@ def _rows(manifest: Path, *, emd_id: str | None, pending: bool) -> list[dict[str
             if row.get("flexibility_source", "").strip() in SKIP_SOURCES:
                 continue
             if emd_id is not None and eid != emd_id.strip():
-                continue
-            if pending and eid in DONE_IDS:
                 continue
             ref = Path(row["reference_mrc"])
             if not ref.is_file():
@@ -221,7 +218,11 @@ def _process_row(row: dict[str, str], *, force: bool, skip_bfactor: bool) -> int
 def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     g = p.add_mutually_exclusive_group(required=True)
-    g.add_argument("--pending", action="store_true", help="All manifest rows except validated trio")
+    g.add_argument(
+        "--pending",
+        action="store_true",
+        help="All manifest rows with local data (skips maps that already have reliability.npz unless --force)",
+    )
     g.add_argument("--emd-id", type=str, help="Single EMDB ID")
     p.add_argument("--manifest", type=Path, default=COHORT_MANIFEST)
     p.add_argument("--force", action="store_true", help="Re-run even if reliability.npz exists")
