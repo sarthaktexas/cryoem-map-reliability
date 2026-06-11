@@ -18,6 +18,7 @@ THESIS_NARRATIVE_COHORT_FIGURES: dict[str, str] = {
     "cohort_cross_metric_median.png": "fig_3_4_cross_metric_median.png",
     "cohort_cross_metric_locres_pairs.png": "fig_3_4_cross_metric_locres_pairs.png",
     "qscore_vs_V_cohort.png": "fig_3_4_qscore_vs_V_cohort.png",
+    "qscore_resolution_sensitivity.png": "fig_3_4_qscore_resolution_sensitivity.png",
     "fscq_vs_V_cohort.png": "fig_3_4_fscq_vs_V_cohort.png",
     "tv_line_scatter.png": "fig_3_4_tv_line_scatter.png",
     "v_incremental_prediction.png": "fig_3_4_v_incremental_prediction.png",
