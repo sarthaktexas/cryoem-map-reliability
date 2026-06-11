@@ -20,8 +20,4 @@ jobs:
         run: pip install -e .
 
       - name: Run unit tests (no local cryo-EM data)
-        run: |
-          python -m pytest tests/ -q \
-            --ignore=tests/test_chimerax_figures.py \
-            --ignore=tests/test_chimerax_mgta_pair.py \
-            --ignore=tests/test_blocres_status.py
+        run: python -m unittest discover -s tests -q
